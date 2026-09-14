@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.venv/
+venv/
+env/
+ENV/
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+build/
+.turbo/
+*.tsbuildinfo
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+!.env.local.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Runtime/generated files
+tmp/
+temp/
+.cache/
+
+# Medical uploads / local storage
+backend/uploads/*
+backend/storage/*
+uploads/*
+storage/*
+
+# Generated artifacts
+coverage/
+htmlcov/
+
+# Credentials
+*.pem
+*.key
+*.crt
+credentials*.json
+service-account*.json
