@@ -4,8 +4,9 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models.models import Patient, PatientLongitudinalProfile, PatientFact
+from app.models.models import Patient, PatientLongitudinalProfile, PatientFact, User
 from app.schemas.longitudinal_profile import LongitudinalProfileSchema
+from app.api.deps import get_current_user, verify_patient_access
 
 router = APIRouter()
 
@@ -31,14 +32,16 @@ def _create_default_profile(patient: Patient) -> dict:
     return default_obj.model_dump()
 
 @router.get("/{patient_id}/longitudinal-profile", response_model=LongitudinalProfileSchema)
-def get_longitudinal_profile(patient_id: str, db: Session = Depends(get_db)):
+def get_longitudinal_profile(
+    patient_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Retrieve the patient's longitudinal profile. Auto-creates baseline if not yet present."""
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
+    patient = verify_patient_access(patient_id, current_user, db)
 
     record = db.query(PatientLongitudinalProfile).filter(
-        PatientLongitudinalProfile.patient_id == patient_id
+        PatientLongitudinalProfile.patient_id == patient.id
     ).first()
 
     if not record:
@@ -58,12 +61,11 @@ def get_longitudinal_profile(patient_id: str, db: Session = Depends(get_db)):
 def update_longitudinal_profile(
     patient_id: str,
     payload: LongitudinalProfileSchema,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Full update/upsert of the patient's longitudinal profile."""
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
+    patient = verify_patient_access(patient_id, current_user, db)
 
     profile_dict = payload.model_dump()
     # Ensure patient_id in payload matches URL
@@ -76,7 +78,7 @@ def update_longitudinal_profile(
     profile_dict["provenance"]["profile_version"] = curr_version + 1
 
     record = db.query(PatientLongitudinalProfile).filter(
-        PatientLongitudinalProfile.patient_id == patient_id
+        PatientLongitudinalProfile.patient_id == patient.id
     ).first()
 
     if record:
@@ -99,15 +101,14 @@ def update_longitudinal_profile(
 def patch_longitudinal_profile(
     patient_id: str,
     patch_data: Dict[str, Any],
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Partial update of the patient's longitudinal profile."""
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
+    patient = verify_patient_access(patient_id, current_user, db)
 
     record = db.query(PatientLongitudinalProfile).filter(
-        PatientLongitudinalProfile.patient_id == patient_id
+        PatientLongitudinalProfile.patient_id == patient.id
     ).first()
 
     current_data = record.profile if record else _create_default_profile(patient)
@@ -153,12 +154,11 @@ def patch_longitudinal_profile(
 def record_patient_fact(
     patient_id: str,
     fact: Dict[str, Any],
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Record an individual fact with provenance into patient_facts."""
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
+    patient = verify_patient_access(patient_id, current_user, db)
 
     new_fact = PatientFact(
         patient_id=patient.id,
@@ -191,10 +191,13 @@ def list_patient_facts(
     patient_id: str,
     category: Optional[str] = Query(None),
     verified: Optional[bool] = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """List historical facts recorded for a patient."""
-    query = db.query(PatientFact).filter(PatientFact.patient_id == patient_id)
+    patient = verify_patient_access(patient_id, current_user, db)
+
+    query = db.query(PatientFact).filter(PatientFact.patient_id == patient.id)
     if category:
         query = query.filter(PatientFact.category == category)
     if verified is not None:

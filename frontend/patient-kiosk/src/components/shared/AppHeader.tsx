@@ -1,6 +1,6 @@
 import React from "react";
 import Link from "next/link";
-import { Activity } from "lucide-react";
+import Image from "next/image";
 
 interface AppHeaderProps {
   title?: string;
@@ -20,8 +20,14 @@ export function AppHeader({ title, subtitle, rightContent }: AppHeaderProps) {
           {/* Left: Brand + Page Title */}
           <div className="flex items-center gap-3 min-w-0">
             <Link href="/" className="shrink-0">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-teal-500 flex items-center justify-center shadow-sm">
-                <Activity className="w-5 h-5 text-white" />
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-teal-500 flex items-center justify-center p-1.5 shadow-sm">
+                <Image
+                  src="/logo-white.png"
+                  alt="MediPlatform"
+                  width={24}
+                  height={24}
+                  className="w-full h-full object-contain"
+                />
               </div>
             </Link>
 

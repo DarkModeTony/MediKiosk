@@ -37,6 +37,7 @@ class Patient(Base):
     encounters = relationship("Encounter", back_populates="patient")
     longitudinal_profile = relationship("PatientLongitudinalProfile", back_populates="patient", uselist=False)
     facts = relationship("PatientFact", back_populates="patient")
+    investigations = relationship("InvestigationOrder", back_populates="patient")
 
 class Encounter(Base):
     __tablename__ = "encounters"
@@ -54,6 +55,8 @@ class Encounter(Base):
     summary = relationship("ClinicalSummary", back_populates="encounter", uselist=False)
     red_flags = relationship("RedFlag", back_populates="encounter")
     prescriptions = relationship("Prescription", back_populates="encounter")
+    assessment = relationship("ClinicalAssessment", back_populates="encounter", uselist=False)
+    investigations = relationship("InvestigationOrder", back_populates="encounter")
 
 class ClinicalHistory(Base):
     __tablename__ = "clinical_histories"
@@ -168,19 +171,44 @@ class RedFlag(Base):
 class Prescription(Base):
     __tablename__ = "prescriptions"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    patient_id = Column(UUID(as_uuid=True), ForeignKey("patients.id"), nullable=True)
     encounter_id = Column(UUID(as_uuid=True), ForeignKey("encounters.id"))
-    doctor_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    doctor_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    status = Column(String, default="DRAFT") # DRAFT, FINALIZED, AMENDED, CANCELLED
+    notes = Column(Text, nullable=True)
+    finalized_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     encounter = relationship("Encounter", back_populates="prescriptions")
-    items = relationship("PrescriptionItem", back_populates="prescription")
+    patient = relationship("Patient")
+    items = relationship("PrescriptionItem", back_populates="prescription", cascade="all, delete-orphan")
 
 class PrescriptionItem(Base):
     __tablename__ = "prescription_items"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     prescription_id = Column(UUID(as_uuid=True), ForeignKey("prescriptions.id"))
+    medicine_id = Column(Integer, nullable=True)
     medication_name = Column(String)
-    instructions = Column(String)
+    generic_name = Column(String, nullable=True)
+    strength = Column(String, nullable=True)
+    dosage_form = Column(String, nullable=True)
+    dose = Column(String, nullable=True)
+    dose_unit = Column(String, nullable=True)
+    route = Column(String, nullable=True)
+    frequency = Column(String, nullable=True)
+    timing = Column(String, nullable=True)
+    duration_value = Column(Integer, nullable=True)
+    duration_unit = Column(String, nullable=True)
+    quantity = Column(Integer, nullable=True)
+    indication = Column(String, nullable=True)
+    instructions = Column(String, nullable=True)
+    is_prn = Column(Boolean, default=False)
+    min_interval = Column(String, nullable=True)
+    max_daily_dose = Column(String, nullable=True)
+    status = Column(String, default="active")
+    item_metadata = Column(JSONB, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
     
     prescription = relationship("Prescription", back_populates="items")
 
@@ -246,4 +274,64 @@ class PatientFact(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     patient = relationship("Patient", back_populates="facts")
+ 
+ 
+class ClinicalAssessment(Base):
+    __tablename__ = "clinical_assessments"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    encounter_id = Column(UUID(as_uuid=True), ForeignKey("encounters.id"), unique=True, index=True)
+    doctor_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    hpi = Column(Text, nullable=True) # History of Present Illness
+    vitals_examination = Column(JSONB, nullable=True) # {bp, pulse, temp, spo2, respiratory_rate, exam_notes, systems_examined}
+    allergies_confirmed = Column(JSONB, nullable=True) # List of confirmed allergies
+    medications_confirmed = Column(JSONB, nullable=True) # List of confirmed active medications
+    diagnosis = Column(JSONB, nullable=True) # List of provisional & confirmed diagnoses [{condition, type, icd10, confidence, notes}]
+    clinical_plan = Column(Text, nullable=True) # Management plan / advice / follow-up
+    status = Column(String, default="DRAFT") # DRAFT, FINALIZED, AMENDED
+    finalized_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    encounter = relationship("Encounter", back_populates="assessment")
+    doctor = relationship("User")
+
+
+class InvestigationOrder(Base):
+    __tablename__ = "investigation_orders"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    encounter_id = Column(UUID(as_uuid=True), ForeignKey("encounters.id"), index=True)
+    patient_id = Column(UUID(as_uuid=True), ForeignKey("patients.id"), index=True)
+    doctor_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    test_name = Column(String, index=True)
+    test_type = Column(String, default="LAB") # LAB, RADIOLOGY, PATHOLOGY, CARDIOLOGY, OTHER
+    urgency = Column(String, default="ROUTINE") # ROUTINE, URGENT, STAT
+    clinical_notes = Column(Text, nullable=True)
+    status = Column(String, default="ORDERED") # ORDERED, PENDING, COMPLETED, REVIEWED, CANCELLED
+    ordered_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    reviewed_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    encounter = relationship("Encounter", back_populates="investigations")
+    patient = relationship("Patient", back_populates="investigations")
+    doctor = relationship("User", foreign_keys=[doctor_id])
+    reviewer = relationship("User", foreign_keys=[reviewed_by])
+    results = relationship("InvestigationResult", back_populates="order", cascade="all, delete-orphan")
+
+
+class InvestigationResult(Base):
+    __tablename__ = "investigation_results"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_id = Column(UUID(as_uuid=True), ForeignKey("investigation_orders.id"), index=True)
+    parameter_name = Column(String)
+    value = Column(String)
+    unit = Column(String, nullable=True)
+    reference_range = Column(String, nullable=True)
+    abnormal_flag = Column(String, default="NORMAL") # NORMAL, LOW, HIGH, CRITICAL, ABNORMAL
+    result_notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    order = relationship("InvestigationOrder", back_populates="results")
 

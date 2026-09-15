@@ -1,15 +1,19 @@
 import uuid
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime
 
 from app.database import get_db
 from app.models.models import Encounter, ClinicalHistory, Symptom, RedFlag as DBRedFlag, KioskSession
+from app.services.conversation_fact_pipeline import process_intake_conversation_facts
 from ai.question_engine.engine import QuestionEngine
 from ai.question_engine.models import ClinicalState, Answer, Question
 from ai.question_engine.pathways import get_pathway
 from ai.red_flags.engine import RedFlagEngine
 from ai.clinical_nlu.service import ClinicalNLUService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -116,6 +120,30 @@ def submit_answer(session_token: str, answer: Answer, db: Session = Depends(get_
             
     # Update state in history
     history.history_data = updated_state.model_dump()
+    
+    # ── Conversation → patient_facts pipeline ──
+    # Extracts structured facts from the raw transcript via NLU,
+    # runs conflict detection against existing facts, and persists
+    # non-conflicting facts to the immutable patient_facts store.
+    if answer.raw_transcript and answer.raw_transcript.strip():
+        try:
+            encounter = db.query(Encounter).filter(Encounter.id == encounter_id).first()
+            if encounter and encounter.patient_id:
+                pipeline_results = process_intake_conversation_facts(
+                    db=db,
+                    patient_id=encounter.patient_id,
+                    encounter_id=uuid.UUID(encounter_id) if isinstance(encounter_id, str) else encounter_id,
+                    transcript=answer.raw_transcript,
+                    question_id=answer.question_id,
+                )
+                if pipeline_results:
+                    logger.info(
+                        f"Fact pipeline: {len(pipeline_results)} facts persisted for encounter {encounter_id}"
+                    )
+        except Exception as e:
+            # Pipeline errors must never crash the clinical intake flow
+            logger.error(f"Fact pipeline error for encounter {encounter_id}: {e}", exc_info=True)
+    
     db.commit()
     
     return updated_state
