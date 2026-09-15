@@ -1,4 +1,4 @@
-﻿# MediPlatform (MediKiosk)
+# MediPlatform (MediKiosk)
 
 > **AI-Assisted Clinical Intake & Medical Record Preparation for High-Volume Indian Hospitals**
 
@@ -175,7 +175,335 @@ All protected routes:
 
 ---
 
-## 5. Repository Structure
+## 5. Patient ↔ Doctor: Complete Data Flow
+
+This section traces exactly how a single patient visit flows from the waiting-room kiosk to the doctor's screen, and how every clinical action feeds back into the patient's permanent longitudinal record.
+
+---
+
+### 5.1 End-to-End Journey (Narrative)
+
+#### Phase 1 — Patient Arrives at Kiosk (Waiting Room)
+
+```
+Patient sits at touch screen kiosk (no smartphone needed)
+  │
+  ├─ [Step 1] Consent
+  │     POST /api/v1/kiosk/session  →  session_token (UUID, 60 min TTL)
+  │     KioskSession row created in PostgreSQL
+  │
+  ├─ [Step 2] Registration
+  │     New patient  →  POST /api/v1/patients/register
+  │                        → Patient row (UUID patient_id, demographic_data JSONB)
+  │                        → Encounter row created (status: IN_PROGRESS)
+  │     Returning    →  Phone/UHID lookup → existing patient_id resolved
+  │
+  ├─ [Step 3] Clinical Intake Conversation
+  │     Adaptive Q&A engine generates next question based on pathway + answers so far
+  │     For each patient answer:
+  │       POST /api/v1/clinical/answer  { session_token, answer_text, is_voice }
+  │         │
+  │         ├─ [Voice] → POST /api/v1/voice/transcribe
+  │         │              Multipart audio → Sarvam AI saaras:v3
+  │         │              Returns: { transcript, detected_language }
+  │         │
+  │         ├─ [NLU]  → GeminiNLUProvider (or MockNLUProvider)
+  │         │              Input: answer text
+  │         │              Output: ExtractedFacts[]
+  │         │                { category, fact_type, value, confidence, source_text }
+  │         │
+  │         ├─ [Validate] → confidence threshold check + category filtering
+  │         │
+  │         ├─ [Reconcile] → ReconciliationEngine (deterministic)
+  │         │                  Detects contradictions (e.g. "no allergies" then "penicillin rash")
+  │         │                  Unknown ≠ Negative: if status=unknown, flags HIGH conflict
+  │         │
+  │         ├─ [Persist] → patient_facts row (immutable, append-only)
+  │         │                { patient_id, category, fact_type, value,
+  │         │                  source_type=CONVERSATION, confidence,
+  │         │                  valid_from, source_text, verified=false }
+  │         │
+  │         ├─ [Sync]    → patient_longitudinal_profiles JSONB updated
+  │         │                (e.g. allergies[], chronic_conditions[], medications[])
+  │         │
+  │         ├─ [Red Flag] → RedFlagEngine (deterministic, never AI)
+  │         │                 Evaluates patient_facts against rule set
+  │         │                 e.g. CARDIAC_EMERGENCY_SUSPECTED, HIGH_GRADE_FEVER
+  │         │                 If triggered: red_flags row inserted (severity HIGH/MEDIUM)
+  │         │                              Encounter.priority elevated in queue
+  │         │
+  │         └─ Returns: next adaptive question (or COMPLETE)
+  │
+  ├─ [Step 4] Document Upload (optional)
+  │     POST /api/v1/documents/upload  (multipart: file + encounter_id)
+  │       → Document row + file stored in backend/uploads/
+  │       → OCR pipeline:
+  │           GeminiOCRProvider → raw text extraction per page
+  │           document_ocr row  { raw_text, engine_used, confidence }
+  │       → Extraction pipeline:
+  │           GeminiExtractionProvider → structured entities
+  │           document_entities rows  { entity_type, value, confidence_score, source_text }
+  │           (medications, diagnoses, vitals extracted with provenance)
+  │
+  ├─ [Step 5] Summary Generation
+  │     POST /api/v1/summaries/generate  { encounter_id }
+  │       → Aggregator collects: patient_facts + document_entities + red_flags
+  │       → GeminiSummaryProvider generates 10-section draft
+  │       → AntiHallucinationValidator strips any entity not traceable to source data
+  │       → clinical_summaries row created  { draft_content JSONB, status: AI_DRAFT }
+  │
+  └─ [Step 6] Encounter Status → WAITING_FOR_DOCTOR
+        Encounter.status updated → patient appears in doctor queue sorted by severity
+```
+
+---
+
+#### Phase 2 — Doctor Opens Encounter (Consultation Room)
+
+```
+Doctor logs in
+  POST /api/v1/auth/login  →  JWT (24h)
+  All subsequent requests: Authorization: Bearer <token>
+
+Queue Page  GET /api/v1/encounters/active
+  → Hospital-scoped query (hospital_id from JWT)
+  → Encounters sorted: HIGH red flags → MEDIUM → NORMAL → WAITING time
+  → Each queue card shows: patient name, chief complaint, wait time, red flag badge
+
+Doctor clicks patient → Encounter Workspace
+  GET /api/v1/encounters/{encounter_id}
+  GET /api/v1/summaries/encounters/{encounter_id}/summary
+  GET /api/v1/clinical/state?encounter_id=...
+  (all validated via verify_encounter_access → hospital scope check)
+
+  ┌── Tab 1: AI Summary ──────────────────────────────────────────────────────┐
+  │  Displays: structured_sections (COMPLAINT, HPI, HISTORY, ALLERGIES,       │
+  │            MEDICATIONS, VITALS, RED FLAGS, SUGGESTED WORKUP)               │
+  │  Doctor can: Edit sections inline → POST /api/v1/summaries/{id}/edit      │
+  │              Verify → POST /api/v1/summaries/{id}/verify                  │
+  │                → summary_verifications row created (final_content, doc_id) │
+  │                → Encounter.status → COMPLETED                              │
+  └───────────────────────────────────────────────────────────────────────────┘
+
+  ┌── Tab 2: Clinical History ─────────────────────────────────────────────────┐
+  │  Displays: all patient_facts for this encounter                             │
+  │            full Q&A transcript from clinical_histories                      │
+  │            red_flags panel (rule_name, evidence, severity)                  │
+  └────────────────────────────────────────────────────────────────────────────┘
+
+  ┌── Tab 3: Prescription (Rx) ────────────────────────────────────────────────┐
+  │  Medicine search (live as-you-type):                                        │
+  │    GET /api/v1/medicines/search?q=amox&limit=20                             │
+  │    → SQLite FTS5 query across 253k Indian medicines (<1ms)                  │
+  │                                                                             │
+  │  Add item → configure dose / frequency / duration / route / timing         │
+  │  Save draft:  POST /api/v1/encounters/{id}/prescriptions                   │
+  │    → prescriptions row (status: DRAFT) + prescription_items rows           │
+  │                                                                             │
+  │  Safety Check: POST /api/v1/prescriptions/{id}/safety-check                │
+  │    → Allergy cross-check vs patient_longitudinal_profiles.allergies[]      │
+  │        Includes cross-reaction logic (penicillin → amoxicillin flagged)    │
+  │    → Duplicate check vs current_medications[]                               │
+  │    → Unknown allergy status warning                                         │
+  │    → Returns: SafetyAlert[] with severity INFO / CAUTION / HIGH            │
+  │                                                                             │
+  │  Finalize: POST /api/v1/prescriptions/{id}/finalize                        │
+  │    → prescription.status → FINALIZED                                        │
+  │    → Each medication written to patient_facts                               │
+  │        { source_type: PRESCRIPTION, confidence: 1.0, verified: true }      │
+  │    → patient_longitudinal_profiles.current_medications[] updated            │
+  └────────────────────────────────────────────────────────────────────────────┘
+
+  ┌── Tab 4: Documents ────────────────────────────────────────────────────────┐
+  │  Lists all uploaded documents for encounter                                 │
+  │  Shows OCR text + extracted entities per document with confidence badge     │
+  └────────────────────────────────────────────────────────────────────────────┘
+
+  ┌── Tab 5: Timeline ─────────────────────────────────────────────────────────┐
+  │  Chronological events: diagnoses, prescriptions, labs, surgeries,           │
+  │                        current encounter, uploaded documents                 │
+  │  Each event: date, type, entities, AI_EXTRACTED / DOCTOR_VERIFIED badge     │
+  └────────────────────────────────────────────────────────────────────────────┘
+
+  ┌── Clinical Assessment ─────────────────────────────────────────────────────┐
+  │  POST /api/v1/encounters/{id}/assessment                                    │
+  │    → Records: HPI, vitals, physical exam, confirmed allergies,              │
+  │               confirmed medications, provisional/confirmed diagnoses, plan  │
+  │  POST /api/v1/encounters/{id}/assessment/verify  (sign-off)                 │
+  │    → Confirmed diagnoses → patient_facts (verified=true, source: ASSESSMENT)│
+  │    → Confirmed allergies → patient_facts + longitudinal_profile.allergies[] │
+  │    → audit_logs row created                                                  │
+  └────────────────────────────────────────────────────────────────────────────┘
+
+  ┌── Investigation Orders ─────────────────────────────────────────────────────┐
+  │  POST /api/v1/encounters/{id}/investigations                                │
+  │    → investigation_orders row (status: ORDERED)                             │
+  │  POST /api/v1/investigations/{id}/results                                   │
+  │    → Results recorded, abnormal_flags set (status: COMPLETED)               │
+  │  POST /api/v1/investigations/{id}/review                                    │
+  │    → Physician acknowledgement (status: REVIEWED)                           │
+  └────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 5.2 Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    actor Patient
+    participant Kiosk as Patient Kiosk<br/>(Next.js :3000)
+    participant API as FastAPI Backend<br/>(:8000)
+    participant Sarvam as Sarvam AI<br/>(ASR)
+    participant Gemini as Gemini AI<br/>(NLU / OCR / Summary)
+    participant DB as PostgreSQL<br/>(Supabase)
+    actor Doctor
+    participant Dashboard as Doctor Dashboard<br/>(Next.js :3001)
+
+    Note over Patient,DB: ── PHASE 1: Patient Intake ──
+
+    Patient->>Kiosk: Tap "Begin"
+    Kiosk->>API: POST /kiosk/session
+    API->>DB: INSERT kiosk_sessions
+    API-->>Kiosk: { session_token, encounter_id }
+
+    Patient->>Kiosk: Register (phone / UHID)
+    Kiosk->>API: POST /patients/register
+    API->>DB: INSERT patients + encounters
+    API-->>Kiosk: { patient_id, encounter_id }
+
+    loop For each clinical question
+        Kiosk->>Patient: Display question
+        Patient->>Kiosk: Answer (voice or touch)
+        opt Voice input
+            Kiosk->>API: POST /voice/transcribe (audio)
+            API->>Sarvam: audio blob
+            Sarvam-->>API: { transcript, language }
+        end
+        Kiosk->>API: POST /clinical/answer { answer_text }
+        API->>Gemini: NLU extraction
+        Gemini-->>API: ExtractedFacts[]
+        API->>API: Reconciliation Engine (deterministic)
+        API->>DB: INSERT patient_facts
+        API->>DB: UPDATE patient_longitudinal_profiles
+        API->>API: Red-Flag Engine (deterministic)
+        opt Red flag triggered
+            API->>DB: INSERT red_flags
+            API->>DB: UPDATE encounters.priority
+        end
+        API-->>Kiosk: next question
+    end
+
+    opt Document upload
+        Patient->>Kiosk: Upload prescription / lab report
+        Kiosk->>API: POST /documents/upload
+        API->>Gemini: OCR → raw text
+        API->>Gemini: Extraction → entities
+        API->>DB: INSERT document_ocr + document_entities
+    end
+
+    Kiosk->>API: POST /summaries/generate
+    API->>Gemini: Generate draft summary
+    API->>API: Anti-hallucination validator
+    API->>DB: INSERT clinical_summaries (AI_DRAFT)
+    API->>DB: UPDATE encounters.status = WAITING_FOR_DOCTOR
+    Kiosk-->>Patient: Show summary preview
+
+    Note over Doctor,DB: ── PHASE 2: Doctor Consultation ──
+
+    Doctor->>Dashboard: Login
+    Dashboard->>API: POST /auth/login
+    API-->>Dashboard: JWT token
+
+    Doctor->>Dashboard: View Queue
+    Dashboard->>API: GET /encounters/active
+    API->>DB: Query encounters (hospital-scoped, sorted by red flag severity)
+    API-->>Dashboard: QueueItem[] (Raj Kumar at top — MEDIUM flag)
+
+    Doctor->>Dashboard: Open patient encounter
+    Dashboard->>API: GET /encounters/{id} + /summary + /clinical/state
+    API->>DB: Fetch encounter + summary + patient_facts
+    API-->>Dashboard: Full encounter workspace data
+
+    Doctor->>Dashboard: Review AI Summary → Verify
+    Dashboard->>API: POST /summaries/{id}/verify
+    API->>DB: INSERT summary_verifications (final_content, doctor_id, verified_at)
+
+    Doctor->>Dashboard: Search medicine "Paracetamol"
+    Dashboard->>API: GET /medicines/search?q=Paracetamol
+    API->>API: SQLite FTS5 query (253k medicines, <1ms)
+    API-->>Dashboard: MedicineSearchResult[]
+
+    Doctor->>Dashboard: Add medicine → Save Draft
+    Dashboard->>API: POST /encounters/{id}/prescriptions
+    API->>DB: INSERT prescriptions + prescription_items
+
+    Doctor->>Dashboard: Safety Check
+    Dashboard->>API: POST /prescriptions/{id}/safety-check
+    API->>DB: Read patient_longitudinal_profiles (allergies, current_meds)
+    API->>API: Allergy cross-check + Duplicate detection (deterministic)
+    API-->>Dashboard: SafetyAlert[] (e.g. ALLERGY: Penicillin → Amoxicillin)
+
+    Doctor->>Dashboard: Finalize Prescription
+    Dashboard->>API: POST /prescriptions/{id}/finalize
+    API->>DB: UPDATE prescriptions.status = FINALIZED
+    API->>DB: INSERT patient_facts (medication, source: PRESCRIPTION, verified: true)
+    API->>DB: UPDATE patient_longitudinal_profiles.current_medications[]
+
+    Doctor->>Dashboard: Sign off Assessment
+    Dashboard->>API: POST /encounters/{id}/assessment/verify
+    API->>DB: INSERT patient_facts (diagnoses + allergies, verified: true)
+    API->>DB: INSERT audit_logs
+```
+
+---
+
+### 5.3 Data Layer: What Lives Where
+
+| Data | Table(s) | Written By | Read By |
+|---|---|---|---|
+| Patient identity | `patients` | Kiosk registration | Dashboard, Kiosk |
+| Active encounter | `encounters` | Clinical start | Queue, all workspace tabs |
+| Raw Q&A conversation | `clinical_histories` | `/clinical/answer` | History tab |
+| Individual clinical facts | `patient_facts` | NLU pipeline, assessment verify, prescription finalize | History tab, safety check |
+| 21-domain profile snapshot | `patient_longitudinal_profiles` | Same as above | Safety check, longitudinal profile page |
+| Red flags | `red_flags` | Red-flag engine (deterministic) | Queue priority, Summary tab |
+| Document files | `backend/uploads/` | `/documents/upload` | Documents tab |
+| OCR raw text | `document_ocr` | Gemini / PaddleOCR | Documents tab |
+| Extracted entities | `document_entities` | GeminiExtractionProvider | Timeline, Summary |
+| AI summary draft | `clinical_summaries` | GeminiSummaryProvider | Summary tab |
+| Doctor-verified summary | `summary_verifications` | `/summaries/{id}/verify` | Legal record |
+| Prescription draft/final | `prescriptions` + `prescription_items` | `/encounters/{id}/prescriptions` | Prescription tab, patient history |
+| Clinical assessment | `clinical_assessments` | `/encounters/{id}/assessment` | Assessment tab |
+| Investigation orders | `investigation_orders` | `/encounters/{id}/investigations` | Investigations tab |
+| Audit trail | `audit_logs` | Assessment verify, investigations | Compliance |
+
+---
+
+### 5.4 Real Example: Raj Kumar (Demo Patient)
+
+Below is a concrete trace of every step for the built-in demo patient **Raj Kumar (42M, Delhi, T2DM + HTN)**:
+
+| Step | Action | Data Written |
+|---|---|---|
+| Kiosk session | `POST /kiosk/session` | `kiosk_sessions` row, `encounter_id` returned |
+| Registration | Phone `9000000001` looked up | Resolves to `patient_id = b54f64df-...` |
+| Intake Q1 | Chief complaint: "Fever and weakness" | `patient_facts`: CHIEF_COMPLAINT = "Fever and general weakness" |
+| Intake Q2 | PMH: "Diabetes 2020, Hypertension 2022" | `patient_facts`: 2× CHRONIC_CONDITION rows |
+| Intake Q3 | Allergy: "Penicillin → skin rash" | `patient_facts`: ALLERGY row; `longitudinal_profile.allergies[]` updated |
+| Intake Q4 | Meds: "Metformin 500mg BD, Amlodipine 5mg OD" | `patient_facts`: 2× MEDICATION rows |
+| Intake Q5 | BP answer triggers rule | `red_flags`: ELEVATED_BP_KNOWN_HYPERTENSIVE, MEDIUM severity; queue priority raised |
+| Summary | Gemini generates 10-section draft | `clinical_summaries` row; validator strips unconfirmed claims |
+| **Doctor queue** | Dashboard shows Raj at top of queue | MEDIUM badge, "Fever and weakness for 3 days" |
+| **Open encounter** | Doctor opens workspace | Loads summary, history, red flags, timeline — all from DB |
+| **Prescribe** | Doctor searches "Azithromycin" | SQLite FTS5 returns 500mg tablet matches in <1ms |
+| **Safety check** | Amoxicillin chosen instead | ALLERGY alert fires (penicillin cross-reaction) |
+| **Finalize Rx** | Doctor signs off prescription | `prescription_items` written; `patient_facts` MEDICATION row added with `verified=true` |
+| **Assessment** | Doctor confirms diagnoses | `clinical_assessments` + `patient_facts` DIAGNOSIS rows, `audit_logs` entry |
+
+---
+
+## 6. Repository Structure
 
 ```
 MediKiosk/
@@ -242,7 +570,7 @@ MediKiosk/
 
 ---
 
-## 6. Database Schema
+## 7. Database Schema
 
 All models in `backend/app/models/models.py`. Managed via SQLAlchemy + Alembic on Supabase PostgreSQL.
 
@@ -280,7 +608,7 @@ Both are updated atomically on every write (NLU extraction, prescription finaliz
 
 ---
 
-## 7. Full API Reference
+## 8. Full API Reference
 
 Base prefix: `/api/v1`. All protected routes require `Authorization: Bearer <token>`.
 
@@ -367,7 +695,7 @@ Base prefix: `/api/v1`. All protected routes require `Authorization: Bearer <tok
 
 ---
 
-## 8. Local Development Setup
+## 9. Local Development Setup
 
 ### Prerequisites
 - Python 3.10+ (developed on 3.14.7)
@@ -454,7 +782,7 @@ Access: http://localhost:3001
 
 ---
 
-## 9. Testing & Validation
+## 10. Testing & Validation
 
 151 tests covering auth isolation, NLU providers, conversation pipelines, prescriptions, assessments, and investigations.
 
@@ -478,7 +806,7 @@ Expected: **151 passed**
 
 ---
 
-## 10. Security & Hospital Isolation
+## 11. Security & Hospital Isolation
 
 Every API endpoint enforces hospital-level tenant isolation:
 
@@ -500,7 +828,7 @@ async def get_encounter(
 
 ---
 
-## 11. Implementation Status
+## 12. Implementation Status
 
 ### Fully Implemented
 - FastAPI backend with CORS, routing, health endpoint
@@ -538,7 +866,7 @@ async def get_encounter(
 
 ---
 
-## 12. Safety, Governance & Ethics
+## 13. Safety, Governance & Ethics
 
 1. **Human-in-the-Loop**: All AI outputs require explicit physician review and verification before entering the legal record.
 2. **Server-Authoritative Safety**: Red flags are always computed by deterministic server-side rules. AI never generates or modifies triage severity.
@@ -549,7 +877,7 @@ async def get_encounter(
 
 ---
 
-## 13. Authors & License
+## 14. Authors & License
 
 Maintained by the **MediPlatform Engineering Team**.  
 Licensed under the [MIT License](LICENSE).
