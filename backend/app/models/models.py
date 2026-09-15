@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, ForeignKey, Integer, Float, Text
+from sqlalchemy import Column, String, DateTime, ForeignKey, Integer, Float, Text, Boolean
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -35,6 +35,8 @@ class Patient(Base):
     
     hospital = relationship("Hospital", back_populates="patients")
     encounters = relationship("Encounter", back_populates="patient")
+    longitudinal_profile = relationship("PatientLongitudinalProfile", back_populates="patient", uselist=False)
+    facts = relationship("PatientFact", back_populates="patient")
 
 class Encounter(Base):
     __tablename__ = "encounters"
@@ -211,3 +213,37 @@ class FHIRResource(Base):
     resource_type = Column(String)
     internal_id = Column(String)
     fhir_data = Column(JSONB)
+
+class PatientLongitudinalProfile(Base):
+    __tablename__ = "patient_longitudinal_profiles"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    patient_id = Column(UUID(as_uuid=True), ForeignKey("patients.id"), unique=True, index=True, nullable=False)
+    schema_version = Column(String, default="1.0")
+    profile = Column(JSONB, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    patient = relationship("Patient", back_populates="longitudinal_profile")
+
+class PatientFact(Base):
+    __tablename__ = "patient_facts"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    patient_id = Column(UUID(as_uuid=True), ForeignKey("patients.id"), index=True, nullable=False)
+    encounter_id = Column(UUID(as_uuid=True), ForeignKey("encounters.id"), nullable=True)
+    category = Column(String, index=True) # allergy, chronic_condition, surgery, medication, anatomy, etc.
+    fact_type = Column(String)
+    body_site = Column(String, nullable=True)
+    laterality = Column(String, nullable=True)
+    value = Column(JSONB)
+    status = Column(String, default="active")
+    source_type = Column(String, default="patient_statement")
+    source_id = Column(String, nullable=True)
+    confidence = Column(Float, nullable=True)
+    verified = Column(Boolean, default=False)
+    valid_from = Column(DateTime, nullable=True)
+    valid_until = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    patient = relationship("Patient", back_populates="facts")
+

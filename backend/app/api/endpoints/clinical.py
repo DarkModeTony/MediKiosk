@@ -122,6 +122,16 @@ def submit_answer(session_token: str, answer: Answer, db: Session = Depends(get_
 
 @router.get("/question/{pathway_name}/{question_id}")
 def get_question_details(pathway_name: str, question_id: str):
+    if pathway_name == "chief_complaint" or question_id == "chief_complaint_initial":
+        return {
+            "id": "chief_complaint_initial",
+            "text": "What brings you here today?",
+            "category": "HPI",
+            "input_type": "VOICE_ONLY",
+            "clinical_field": "chief_complaint",
+            "options": None,
+            "required": True
+        }
     pathway = get_pathway(pathway_name)
     if not pathway:
         raise HTTPException(status_code=404, detail="Pathway not found")
