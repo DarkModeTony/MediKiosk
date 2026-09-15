@@ -54,18 +54,18 @@ export default function EncounterWorkspace({ params }: { params: Promise<{ encou
       try {
         const enc = await getEncounter(resolvedParams.encounterId);
         setEncounter(enc);
-        const [pat, rf, sum, cstate, tl] = await Promise.all([
+        const [patR, rfR, sumR, cstateR, tlR] = await Promise.allSettled([
           getPatient(enc.patient_id),
           getRedFlags(enc.id),
           getSummary(enc.id),
           getClinicalState(enc.id),
           getTimeline(enc.patient_id),
         ]);
-        setPatient(pat);
-        setRedFlags(rf);
-        setSummary(sum);
-        setClinicalState(cstate);
-        setTimeline(tl);
+        if (patR.status === 'fulfilled') setPatient(patR.value);
+        if (rfR.status === 'fulfilled') setRedFlags(rfR.value);
+        if (sumR.status === 'fulfilled') setSummary(sumR.value);
+        if (cstateR.status === 'fulfilled') setClinicalState(cstateR.value);
+        if (tlR.status === 'fulfilled') setTimeline(tlR.value);
       } catch (e) {
         console.error(e);
       } finally {
