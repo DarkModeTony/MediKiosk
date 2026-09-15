@@ -3,11 +3,18 @@ import { MOCK_PATIENTS } from './mockData';
 import { Patient } from './types';
 
 export async function getPatient(patientId: string): Promise<Patient> {
-  if (IS_MOCK) {
+  // Always serve mock data for demo patient IDs
+  const demoPatient = MOCK_PATIENTS.find(p => p.id === patientId);
+  if (IS_MOCK || demoPatient) {
     await mockDelay();
-    const patient = MOCK_PATIENTS.find(p => p.id === patientId);
-    if (!patient) throw new Error('Patient not found');
-    return patient;
+    if (!demoPatient) throw new Error('Patient not found');
+    return demoPatient;
   }
-  return fetchClient(`/patients/${patientId}`);
+  try {
+    return await fetchClient(`/patients/${patientId}`);
+  } catch (err) {
+    const fallback = MOCK_PATIENTS.find(p => p.id === patientId);
+    if (fallback) return fallback;
+    throw err;
+  }
 }

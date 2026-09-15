@@ -3,7 +3,7 @@ import { MOCK_SUMMARIES } from './mockData';
 import { ClinicalSummary, SummaryVersion } from './types';
 
 export async function getSummary(encounterId: string): Promise<ClinicalSummary> {
-  if (IS_MOCK) {
+  if (IS_MOCK || MOCK_SUMMARIES[encounterId]) {
     await mockDelay();
     return MOCK_SUMMARIES[encounterId] || { 
       summary_id: '', status: 'AI_DRAFT', 
@@ -11,7 +11,15 @@ export async function getSummary(encounterId: string): Promise<ClinicalSummary> 
       original_draft: { structured_sections: [] }
     };
   }
-  return fetchClient(`/summaries/encounters/${encounterId}/summary`);
+  try {
+    return await fetchClient(`/summaries/encounters/${encounterId}/summary`);
+  } catch {
+    return MOCK_SUMMARIES[encounterId] || { 
+      summary_id: '', status: 'AI_DRAFT', 
+      latest_version: { structured_sections: [] },
+      original_draft: { structured_sections: [] }
+    };
+  }
 }
 
 export async function editSummary(summaryId: string, content: SummaryVersion): Promise<{status: string}> {
