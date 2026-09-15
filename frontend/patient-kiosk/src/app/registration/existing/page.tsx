@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { StatusMessage } from "@/components/shared/StatusMessage";
 import { searchPatient } from "@/lib/api/patients";
 import { createKioskSession } from "@/lib/api/kiosk";
-import { UserSearch, Delete, Sparkles, Loader2 } from "lucide-react";
+import { UserSearch, Delete, Sparkles, Loader2, Phone } from "lucide-react";
 
 export default function ExistingPatientPage() {
   const router = useRouter();
@@ -107,10 +107,21 @@ export default function ExistingPatientPage() {
                 setQuery("patient_001");
                 handleSearch(undefined, "patient_001");
               }}
-              className="px-3 py-1 bg-slate-100 hover:bg-slate-200 rounded-full font-mono text-slate-700 font-bold border border-slate-200 flex items-center gap-1.5 transition"
+              className="px-3 py-1 bg-slate-100 hover:bg-slate-200 rounded-full font-mono text-slate-700 font-bold border border-slate-200 flex items-center gap-1.5 transition cursor-pointer"
             >
               <Sparkles className="w-3 h-3 text-amber-600" />
               patient_001 (Raj Kumar)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("9000000001");
+                handleSearch(undefined, "9000000001");
+              }}
+              className="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded-full font-mono font-bold border border-blue-200 flex items-center gap-1.5 transition cursor-pointer"
+            >
+              <Phone className="w-3 h-3 text-blue-600" />
+              9000000001 (Mobile)
             </button>
           </div>
 

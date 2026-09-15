@@ -15,6 +15,59 @@ class PatientRegistrationRequest(BaseModel):
     consent: bool = True
     hospital_id: Optional[str] = None
 
+@router.get("/search")
+def search_patient(
+    q: str,
+    db: Session = Depends(get_db)
+):
+    query_str = (q or "").strip()
+    if not query_str:
+        raise HTTPException(status_code=400, detail="Search query is required")
+
+    # 1. Check if demo alias for Raj Kumar
+    is_raj_alias = query_str.lower() in [
+        "patient_001", "pat_raj_123", "raj", "raj kumar", "9000000001"
+    ]
+    
+    patient = None
+    if is_raj_alias:
+        for p in db.query(Patient).all():
+            demo = p.demographic_data or {}
+            if str(demo.get("phone")) == "9000000001" or str(demo.get("name", "")).strip().lower() == "raj kumar":
+                patient = p
+                break
+
+    # 2. Check by UUID directly
+    if not patient:
+        try:
+            target_uuid = uuid.UUID(query_str)
+            patient = db.query(Patient).filter(Patient.id == target_uuid).first()
+        except ValueError:
+            pass
+
+    # 3. Check by phone number or name in demographic_data
+    if not patient:
+        for p in db.query(Patient).all():
+            demo = p.demographic_data or {}
+            phone = str(demo.get("phone", "") or demo.get("mobile_number", "") or demo.get("mobile", ""))
+            name = str(demo.get("name", "")).lower()
+            if query_str in phone or query_str.lower() in name:
+                patient = p
+                break
+
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    demo = patient.demographic_data or {}
+    return {
+        "patient_id": str(patient.id),
+        "name": demo.get("name", "Unknown"),
+        "age": demo.get("age"),
+        "gender": demo.get("gender"),
+        "phone": demo.get("phone", demo.get("mobile_number")),
+        "hospital_id": str(patient.hospital_id) if patient.hospital_id else None
+    }
+
 @router.get("/{patient_id}")
 def get_patient(
     patient_id: str,
