@@ -23,8 +23,9 @@ export async function uploadDocument(file: File, docType: string, sessionToken: 
   formData.append("doc_type", docType);
   formData.append("session_token", sessionToken);
 
+  const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1").replace(/\/api\/v1\/?$/, "");
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/documents/upload`, {
+    const res = await fetch(`${apiBase}/api/v1/documents/upload`, {
       method: "POST",
       body: formData,
     });

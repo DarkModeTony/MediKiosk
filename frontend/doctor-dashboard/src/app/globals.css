@@ -1,14 +1,152 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
-@import "tailwindcss";
+@custom-variant dark (&:is(.dark *));
 
 @theme {
-  --color-brand-blue: #1e3a8a;
-  --color-brand-teal: #0d9488;
-  --color-bg-light: #f8fafc;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+
+  /* Doctor Dashboard Brand Colors */
+  --color-brand-primary: oklch(0.60 0.14 185);    /* teal-600 */
+  --color-brand-navy: oklch(0.12 0.025 255);       /* slate-950 */
+  --color-brand-sidebar: oklch(0.14 0.02 255);     /* slate-900 */
+  --color-brand-blue: oklch(0.54 0.2 253);
+
+  /* Semantic tokens — light mode */
+  --color-background: oklch(0.98 0.003 250);
+  --color-foreground: oklch(0.14 0.02 255);
+  --color-card: oklch(1 0 0);
+  --color-card-foreground: oklch(0.14 0.02 255);
+  --color-popover: oklch(1 0 0);
+  --color-popover-foreground: oklch(0.14 0.02 255);
+  --color-primary: oklch(0.60 0.14 185);
+  --color-primary-foreground: oklch(1 0 0);
+  --color-secondary: oklch(0.97 0.004 240);
+  --color-secondary-foreground: oklch(0.22 0.04 255);
+  --color-muted: oklch(0.96 0.005 240);
+  --color-muted-foreground: oklch(0.52 0.01 250);
+  --color-accent: oklch(0.96 0.005 240);
+  --color-accent-foreground: oklch(0.205 0 0);
+  --color-destructive: oklch(0.577 0.245 27.325);
+  --color-destructive-foreground: oklch(0.985 0 0);
+  --color-border: oklch(0.91 0.005 240);
+  --color-input: oklch(0.91 0.005 240);
+  --color-ring: oklch(0.60 0.14 185);
+
+  --radius: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-md: 0.625rem;
+  --radius-sm: 0.5rem;
+
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes slide-in-right {
+    from { opacity: 0; transform: translateX(-12px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  @keyframes count-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 }
 
-body {
-  background-color: var(--color-bg-light);
-  color: #0f172a;
+/* ── CSS Variables (shadcn compat) ─────────────────────────────────────── */
+@layer base {
+  :root {
+    --background: 220 14% 96%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 175 77% 30%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 220 14% 95%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 220 14% 95%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 175 77% 30%;
+    --radius: 0.75rem;
+
+    /* Sidebar specific */
+    --sidebar-bg: #0f172a;
+    --sidebar-text: #94a3b8;
+    --sidebar-text-active: #f1f5f9;
+    --sidebar-accent: #1e293b;
+    --sidebar-border: #1e293b;
+  }
+
+  .dark {
+    --background: 222 47% 7%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 175 77% 40%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 175 77% 40%;
+  }
+}
+
+@layer base {
+  *, ::after, ::before, ::backdrop, ::file-selector-button {
+    border-color: var(--color-border, currentColor);
+  }
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground antialiased; }
+
+  /* Premium custom scrollbar */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: oklch(0.82 0.01 250); border-radius: 9999px; }
+  ::-webkit-scrollbar-thumb:hover { background: oklch(0.72 0.02 250); }
+}
+
+@layer utilities {
+  .animate-fade-in { animation: fade-in 0.35s ease-out both; }
+  .animate-slide-in-right { animation: slide-in-right 0.3s ease-out both; }
+
+  /* Glass card */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+  }
+
+  /* Gradient text */
+  .text-gradient-teal {
+    background: linear-gradient(135deg, #0d9488, #2563eb);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Priority borders */
+  .priority-high { border-left: 3px solid #ef4444; }
+  .priority-medium { border-left: 3px solid #f59e0b; }
+  .priority-normal { border-left: 3px solid #3b82f6; }
 }
