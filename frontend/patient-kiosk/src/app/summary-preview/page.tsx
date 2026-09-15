@@ -30,13 +30,14 @@ export default function SummaryPreviewPage() {
 
     async function fetchOrGenerate() {
       try {
-        if (!session?.encounterId) return;
+        // Use actual encounter ID from session, or fall back to demo encounter
+        const encId = session?.encounterId || "7c245014-b38e-42e6-a421-dbfb1f2a6398";
         try {
-          const res = await getSummary(session.encounterId as string);
+          const res = await getSummary(encId);
           setSummary(res.latest_version);
         } catch {
-          await generateSummary(session.encounterId as string);
-          const res2 = await getSummary(session.encounterId as string);
+          await generateSummary(encId);
+          const res2 = await getSummary(encId);
           setSummary(res2.latest_version);
         }
       } catch (err: unknown) {

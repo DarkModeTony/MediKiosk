@@ -48,9 +48,24 @@ def create_session(payload: SessionCreateRequest, db: Session = Depends(get_db))
     token = str(uuid.uuid4())
     expires = datetime.utcnow() + timedelta(minutes=60)
     
+    # Find active encounter for this patient
+    from app.models.models import Encounter
+    encounter_id = None
+    if payload.patient_id:
+        try:
+            pat_uuid = uuid.UUID(payload.patient_id)
+            active_enc = db.query(Encounter).filter(
+                Encounter.patient_id == pat_uuid,
+                Encounter.status == "WAITING_FOR_DOCTOR"
+            ).order_by(Encounter.start_time.desc()).first()
+            if active_enc:
+                encounter_id = str(active_enc.id)
+        except Exception:
+            pass
+    
     session = KioskSession(
         session_token=token,
-        data={"patient_id": payload.patient_id, "language": payload.language},
+        data={"patient_id": payload.patient_id, "language": payload.language, "encounter_id": encounter_id},
         expires_at=expires
     )
     db.add(session)
@@ -59,5 +74,7 @@ def create_session(payload: SessionCreateRequest, db: Session = Depends(get_db))
     
     return {
         "session_token": token,
-        "expires_at": expires.isoformat()
+        "expires_at": expires.isoformat(),
+        "encounter_id": encounter_id,
+        "patient_id": payload.patient_id
     }

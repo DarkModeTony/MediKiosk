@@ -45,7 +45,8 @@ export default function ExistingPatientPage() {
       // 3. Save to Context & Redirect
       setSession({
         sessionId: sessionData.session_token,
-        patientId: patientData.patient_id,
+        patientId: patientData.patient_id || sessionData.patient_id,
+        encounterId: sessionData.encounter_id ?? undefined,
         expiresAt: sessionData.expires_at,
       });
 

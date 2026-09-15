@@ -8,6 +8,8 @@ export interface SessionCreateRequest {
 export interface SessionCreateResponse {
   session_token: string;
   expires_at: string;
+  encounter_id?: string | null;
+  patient_id?: string | null;
 }
 
 export async function createKioskSession(data: SessionCreateRequest): Promise<SessionCreateResponse> {
