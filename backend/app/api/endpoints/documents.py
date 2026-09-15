@@ -6,8 +6,9 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.models.models import Document, DocumentOCR, DocumentEntity, KioskSession, Encounter
+from app.models.models import Document, DocumentOCR, DocumentEntity, KioskSession, Encounter, User
 from app.services.storage import get_document_storage
+from app.api.deps import get_current_user, verify_document_access, verify_patient_access
 from ai.ocr.service import get_ocr_provider
 from ai.medical_extraction.service import get_extraction_provider
 from ai.medical_extraction.models import EntityType, VerificationStatus
@@ -156,10 +157,12 @@ def process_ocr(document_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{document_id}")
-def get_document(document_id: str, db: Session = Depends(get_db)):
-    doc = db.query(Document).filter(Document.id == document_id).first()
-    if not doc:
-        raise HTTPException(status_code=404, detail="Not found")
+def get_document(
+    document_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    doc = verify_document_access(document_id, current_user, db)
     return {
         "id": str(doc.id),
         "doc_type": doc.doc_type,
@@ -168,13 +171,23 @@ def get_document(document_id: str, db: Session = Depends(get_db)):
     }
 
 @router.get("/{document_id}/ocr")
-def get_document_ocr(document_id: str, db: Session = Depends(get_db)):
-    ocr_pages = db.query(DocumentOCR).filter(DocumentOCR.document_id == document_id).order_by(DocumentOCR.page_number).all()
+def get_document_ocr(
+    document_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    doc = verify_document_access(document_id, current_user, db)
+    ocr_pages = db.query(DocumentOCR).filter(DocumentOCR.document_id == doc.id).order_by(DocumentOCR.page_number).all()
     return [{"page": o.page_number, "raw_text": o.raw_text, "confidence": o.confidence} for o in ocr_pages]
 
 @router.get("/{document_id}/entities")
-def get_document_entities(document_id: str, db: Session = Depends(get_db)):
-    entities = db.query(DocumentEntity).filter(DocumentEntity.document_id == document_id).all()
+def get_document_entities(
+    document_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    doc = verify_document_access(document_id, current_user, db)
+    entities = db.query(DocumentEntity).filter(DocumentEntity.document_id == doc.id).all()
     
     # Group them up for the frontend
     return [
@@ -198,11 +211,17 @@ class ConfirmDocumentRequest(BaseModel):
     entities: List[ConfirmEntityRequest]
 
 @router.post("/{document_id}/confirm")
-def confirm_document(document_id: str, payload: ConfirmDocumentRequest, db: Session = Depends(get_db)):
+def confirm_document(
+    document_id: str,
+    payload: ConfirmDocumentRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    doc = verify_document_access(document_id, current_user, db)
     for ent_payload in payload.entities:
         db_ent = db.query(DocumentEntity).filter(
             DocumentEntity.id == ent_payload.entity_id, 
-            DocumentEntity.document_id == document_id
+            DocumentEntity.document_id == doc.id
         ).first()
         if db_ent:
             # We don't overwrite the original source_text or original raw text. 
@@ -215,9 +234,14 @@ def confirm_document(document_id: str, payload: ConfirmDocumentRequest, db: Sess
     return {"status": "success"}
 
 @router.get("/patients/{patient_id}/timeline")
-def get_patient_timeline(patient_id: str, db: Session = Depends(get_db)):
+def get_patient_timeline(
+    patient_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    patient = verify_patient_access(patient_id, current_user, db)
     # This gathers documents connected to patient_id directly or via encounters
-    encounters = db.query(Encounter).filter(Encounter.patient_id == patient_id).all()
+    encounters = db.query(Encounter).filter(Encounter.patient_id == patient.id).all()
     enc_ids = [e.id for e in encounters]
     
     docs = db.query(Document).filter(Document.encounter_id.in_(enc_ids)).all()
@@ -240,6 +264,6 @@ def get_patient_timeline(patient_id: str, db: Session = Depends(get_db)):
     events.sort(key=lambda x: x["date"] or "")
     
     return {
-        "patient_id": patient_id,
+        "patient_id": str(patient.id),
         "events": events
     }

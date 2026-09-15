@@ -1,13 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models.models import Encounter, RedFlag, Patient
+from app.models.models import Encounter, RedFlag, Patient, User
+from app.api.deps import get_current_user, verify_encounter_access
 
 router = APIRouter()
 
 @router.get("/active")
-def get_active_encounters(db: Session = Depends(get_db)):
-    encounters = db.query(Encounter).filter(Encounter.status == "IN_PROGRESS").all()
+def get_active_encounters(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    query = db.query(Encounter).join(Patient, Encounter.patient_id == Patient.id)
+    if current_user.hospital_id:
+        query = query.filter(Patient.hospital_id == current_user.hospital_id)
+    
+    encounters = query.filter(Encounter.status == "IN_PROGRESS").all()
     queue = []
     for enc in encounters:
         patient = db.query(Patient).filter(Patient.id == enc.patient_id).first()
@@ -33,13 +41,14 @@ def get_active_encounters(db: Session = Depends(get_db)):
     return queue
 
 @router.get("/{encounter_id}")
-def get_encounter(encounter_id: str, db: Session = Depends(get_db)):
-    encounter = db.query(Encounter).filter(Encounter.id == encounter_id).first()
-    if not encounter:
-        raise HTTPException(status_code=404, detail="Encounter not found")
+def get_encounter(
+    encounter_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    encounter = verify_encounter_access(encounter_id, current_user, db)
         
     # Get red flags to determine priority
-    red_flags = db.query(RedFlag).filter(RedFlag.encounter_id == encounter_id).all()
     red_flags = db.query(RedFlag).filter(RedFlag.encounter_id == str(encounter.id)).all()
     priority = "NORMAL"
     if any(rf.severity == "HIGH" for rf in red_flags):

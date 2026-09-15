@@ -2,9 +2,9 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
-  Activity,
   LayoutDashboard,
   Users,
   LogOut,
@@ -54,13 +54,19 @@ export default function DoctorLayout({ children }: DoctorLayoutProps) {
       >
         {/* Logo */}
         <div className="h-16 flex items-center px-4 border-b border-slate-800 bg-slate-950 shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center shrink-0 shadow-md">
-            <Activity className="w-4.5 h-4.5 text-white w-[18px] h-[18px]" />
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center shrink-0 p-1 shadow-md">
+            <Image
+              src="/logo-white.png"
+              alt="MediPlatform"
+              width={22}
+              height={22}
+              className="w-full h-full object-contain"
+            />
           </div>
           {!collapsed && (
             <div className="ml-3 min-w-0">
               <p className="text-white font-bold text-sm truncate">MediPlatform</p>
-              <p className="text-teal-500 text-[10px] font-semibold tracking-wider truncate">PHYSICIAN WORKSPACE</p>
+              <p className="text-teal-400 text-[10px] font-semibold tracking-wider truncate">PHYSICIAN WORKSPACE</p>
             </div>
           )}
         </div>

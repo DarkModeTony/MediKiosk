@@ -6,6 +6,7 @@ import RedFlagPanel from '@/components/workspace/RedFlagPanel';
 import SummaryPanel from '@/components/workspace/SummaryPanel';
 import DocumentViewer from '@/components/workspace/DocumentViewer';
 import ClinicalTimeline from '@/components/workspace/ClinicalTimeline';
+import PrescriptionWorkspace from '@/components/workspace/PrescriptionWorkspace';
 
 import { getEncounter } from '@/lib/api/encounters';
 import { getPatient } from '@/lib/api/patients';
@@ -21,16 +22,18 @@ import {
   Activity,
   List,
   Image as ImageIcon,
+  Pill,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Encounter, Patient, RedFlag, ClinicalSummary, ClinicalState, PatientTimeline } from '@/lib/api/types';
 import { cn } from '@/lib/utils';
 
-type Tab = 'summary' | 'history' | 'documents' | 'timeline';
+type Tab = 'summary' | 'history' | 'prescription' | 'documents' | 'timeline';
 
 const TABS: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { key: 'summary', label: 'AI Summary', icon: FileText },
   { key: 'history', label: 'Clinical History', icon: List },
+  { key: 'prescription', label: 'Prescription (Rx)', icon: Pill },
   { key: 'documents', label: 'Documents', icon: ImageIcon },
   { key: 'timeline', label: 'Timeline', icon: Activity },
 ];
@@ -215,6 +218,15 @@ export default function EncounterWorkspace({ params }: { params: Promise<{ encou
                   </div>
                 ))}
               </div>
+            )}
+
+            {activeTab === 'prescription' && (
+              <PrescriptionWorkspace
+                encounter={encounter}
+                patient={patient}
+                redFlags={redFlags}
+                clinicalState={clinicalState}
+              />
             )}
 
             {activeTab === 'documents' && (

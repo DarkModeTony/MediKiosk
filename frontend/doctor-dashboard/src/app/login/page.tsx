@@ -1,8 +1,9 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Activity, Stethoscope, Shield, Sparkles } from 'lucide-react';
+import { Stethoscope, Shield, Sparkles } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -23,8 +24,14 @@ export default function LoginPage() {
         <div className="relative space-y-10 max-w-md">
           {/* Logo */}
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center shadow-2xl shadow-teal-600/30">
-              <Activity className="w-8 h-8 text-white" />
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center p-2.5 shadow-2xl shadow-teal-600/30">
+              <Image
+                src="/logo-white.png"
+                alt="MediPlatform Logo"
+                width={40}
+                height={40}
+                className="w-full h-full object-contain"
+              />
             </div>
             <div>
               <h1 className="text-2xl font-black text-white tracking-tight">MediPlatform</h1>
@@ -68,8 +75,14 @@ export default function LoginPage() {
         <div className="w-full max-w-md space-y-8">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center shadow-sm">
-              <Activity className="w-6 h-6 text-white" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center p-1.5 shadow-sm">
+              <Image
+                src="/logo-white.png"
+                alt="MediPlatform Logo"
+                width={28}
+                height={28}
+                className="w-full h-full object-contain"
+              />
             </div>
             <span className="text-xl font-black text-slate-900">MediPlatform</span>
           </div>
