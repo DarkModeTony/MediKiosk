@@ -23,6 +23,7 @@ High-volume OPDs across India see **80-120+ patients per shift**, leaving doctor
 - **Paper fragmentation**: Crumpled prescriptions, unsorted lab slips, illegible handwriting.
 - **Language barriers**: Patients struggle to communicate history, especially in regional languages.
 - **No digital triage**: Critical patients queue alongside minor ailments.
+- **Fragmented clinical intelligence:** Doctors lack a unified view that connects patient history, symptoms, reports, and prescriptions into actionable clinical context.
 
 **MediPlatform** turns the waiting room into a clinical preparation engine:
 
