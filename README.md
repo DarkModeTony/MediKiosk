@@ -1,4 +1,4 @@
-# MediPlatform (MediKiosk)
+# MediPlatform (MediKiosk).
 
 > **AI-Assisted Clinical Intake & Medical Record Preparation for High-Volume Indian Hospitals**
 
