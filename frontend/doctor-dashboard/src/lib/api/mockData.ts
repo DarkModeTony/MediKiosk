@@ -1,4 +1,4 @@
-﻿import {
+import {
   Patient, Encounter, ClinicalState, RedFlag, PatientTimeline, ClinicalSummary
 } from './types';
 
@@ -222,6 +222,64 @@ export const MOCK_TIMELINES: Record<string, PatientTimeline> = {
         document_id: "enc_raj_001",
         document_type: "Current Encounter",
         entities: [],
+      },
+      {
+        date: "2026-09-15T09:42:00Z",
+        date_known: true,
+        type: "DOCTALK_REQUESTED",
+        title: "🩺 DocTalk requested",
+        specialty: "Cardiology",
+        reason: "Evaluation of exertional retrosternal chest tightness with history of T2DM & HTN",
+        urgency: "URGENT",
+        requested_duration_minutes: 5,
+        specialist_name: "Dr. Ananya Sharma",
+        specialist_hospital: "City Heart Hospital",
+      },
+      {
+        date: "2026-09-15T09:44:00Z",
+        date_known: true,
+        type: "DOCTALK_ACCEPTED",
+        title: "✓ Specialist accepted",
+        specialty: "Cardiology",
+        specialist_name: "Dr. Ananya Sharma",
+        specialist_hospital: "City Heart Hospital",
+      },
+      {
+        date: "2026-09-15T09:45:00Z",
+        date_known: true,
+        type: "DOCTALK_STARTED",
+        title: "🟢 Consultation started",
+        specialty: "Cardiology",
+        specialist_name: "Dr. Ananya Sharma",
+        specialist_hospital: "City Heart Hospital",
+        duration_minutes: 5,
+      },
+      {
+        date: "2026-09-15T09:51:00Z",
+        date_known: true,
+        type: "DOCTALK_COMPLETED",
+        title: "✓ Consultation completed",
+        specialty: "Cardiology",
+        specialist_name: "Dr. Ananya Sharma",
+        specialist_hospital: "City Heart Hospital",
+      },
+      {
+        date: "2026-09-15T09:52:00Z",
+        date_known: true,
+        type: "DOCTALK_OPINION",
+        title: "📄 Specialist opinion added",
+        specialty: "Cardiology",
+        specialist_name: "Dr. Ananya Sharma",
+        specialist_hospital: "City Heart Hospital",
+        clinical_opinion: "High suspicion of stable coronary artery disease with angina pectoris given retrosternal tightness on exertion, longstanding diabetes (HbA1c 7.4%), and hypertension.",
+        recommendations: [
+          "Urgent resting 12-lead ECG and serum Troponin-I test",
+          "Add sublingual Nitroglycerin 0.5 mg PRN for acute chest discomfort",
+          "Schedule Stress Echocardiography / TMT once acute coronary syndrome is ruled out",
+          "Initiate Statin therapy (Atorvastatin 40 mg OD) and review glycemic control"
+        ],
+        further_evaluation: "Coronary angiogram recommended if stress test shows ischemia or symptoms worsen.",
+        follow_up: "Cardiology outpatient review in 5-7 days with ECG and Troponin results.",
       },
     ],
   } satisfies PatientTimeline,

@@ -11,7 +11,7 @@ import { Mic, Touchpad, Stethoscope, Sparkles, ChevronLeft, ArrowRight } from "l
 
 export default function ClinicalIntroPage() {
   const router = useRouter();
-  const { session } = useKiosk();
+  const { session, setSession } = useKiosk();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -23,7 +23,13 @@ export default function ClinicalIntroPage() {
     if (!session) return;
     setLoading(true);
     try {
-      await startClinicalIntake(session.sessionId);
+      const state = await startClinicalIntake(session.sessionId);
+      if (state?.encounter_id) {
+        setSession({
+          ...session,
+          encounterId: state.encounter_id,
+        });
+      }
       router.push("/clinical/conversation");
     } catch (err: unknown) {
       const e = err as Error;

@@ -58,9 +58,9 @@ export default function DocumentViewer({ timelineEvents }: DocumentViewerProps) 
               
               <div>
                 <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Extracted Entities</h5>
-                {selectedDoc.entities?.length > 0 ? (
+                {Boolean(selectedDoc.entities && selectedDoc.entities.length > 0) ? (
                   <div className="space-y-3">
-                    {selectedDoc.entities.map((entity: DocumentEntity, i: number) => {
+                    {selectedDoc.entities!.map((entity: DocumentEntity, i: number) => {
                       const val = entity.value as Record<string, string>;
                       return (
                       <div key={i} className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">

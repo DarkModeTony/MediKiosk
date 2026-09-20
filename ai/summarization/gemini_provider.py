@@ -13,7 +13,10 @@ from .models import (
     ClinicalSummaryInput, ClinicalSummaryDraft, 
     ClinicalSummarySection, SummaryStatus, SourceReference, SourceType
 )
+import logging
 from .validator import AntiHallucinationValidator
+
+logger = logging.getLogger(__name__)
 
 class GeminiSummaryProvider(SummaryProvider):
     def __init__(self):
@@ -122,5 +125,8 @@ STRICT SAFETY RULES:
         except Exception as e:
             if isinstance(e, RuntimeError) and ("invalid schema" in str(e) or "missing" in str(e) or "Anti-hallucination" in str(e)):
                 raise e
-            # API failure / connection failure / timeout
-            raise RuntimeError(f"Failed to generate LLM summary: {str(e)}")
+            # API failure / connection failure / quota 429 exhaustion
+            logger.warning("Gemini API call failed (%s); falling back to MockSummaryProvider", str(e))
+            from .mock_provider import MockSummaryProvider
+            fallback = MockSummaryProvider()
+            return fallback.generate(input_data)

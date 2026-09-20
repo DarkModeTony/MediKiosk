@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppHeader } from "@/components/shared/AppHeader";
 import { useKiosk } from "@/components/providers/KioskSessionProvider";
-import { generateSummary, getSummary, ClinicalSummary } from "@/lib/api/summaries";
+import { generateSummary, getSummary, getKioskSummary, generateKioskSummary, ClinicalSummary } from "@/lib/api/summaries";
 import {
   Loader2,
   FileText,
@@ -30,15 +30,47 @@ export default function SummaryPreviewPage() {
 
     async function fetchOrGenerate() {
       try {
-        // Use actual encounter ID from session, or fall back to demo encounter
-        const encId = session?.encounterId || "7c245014-b38e-42e6-a421-dbfb1f2a6398";
-        try {
-          const res = await getSummary(encId);
-          setSummary(res.latest_version);
-        } catch {
-          await generateSummary(encId);
-          const res2 = await getSummary(encId);
-          setSummary(res2.latest_version);
+        if (!session?.sessionId && !session?.encounterId) {
+          setError("No active session found");
+          setLoading(false);
+          return;
+        }
+
+        // 1. First priority: Authenticated kiosk session endpoint
+        if (session.sessionId) {
+          try {
+            const res = await getKioskSummary(session.sessionId);
+            if (res?.latest_version) {
+              setSummary(res.latest_version);
+              return;
+            }
+          } catch {
+            // Attempt generating summary for this session
+            try {
+              await generateKioskSummary(session.sessionId);
+              const res2 = await getKioskSummary(session.sessionId);
+              if (res2?.latest_version) {
+                setSummary(res2.latest_version);
+                return;
+              }
+            } catch (genErr) {
+              console.warn("Kiosk summary auto-generation failed:", genErr);
+            }
+          }
+        }
+
+        // 2. Fallback: Query by encounterId if known
+        if (session.encounterId) {
+          try {
+            const res = await getSummary(session.encounterId);
+            setSummary(res.latest_version);
+          } catch {
+            await generateSummary(session.encounterId);
+            const res2 = await getSummary(session.encounterId);
+            setSummary(res2.latest_version);
+          }
+        } else {
+          setError("No clinical summary found for this session.");
         }
       } catch (err: unknown) {
         const e = err as Error;

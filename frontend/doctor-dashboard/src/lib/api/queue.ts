@@ -28,12 +28,13 @@ export async function getQueue(): Promise<QueueItem[]> {
     });
   }
   
-  // Real API — always prepend demo patient
+  // Real API
   try {
     const apiQueue: QueueItem[] = await fetchClient(`/encounters/active`);
-    // Remove any duplicate of Raj if already present, then prepend
-    const withoutRaj = apiQueue.filter(q => q.patient_id !== 'pat_raj_123' && q.id !== 'enc_raj_001');
-    return [DEMO_RAJ_QUEUE_ITEM, ...withoutRaj];
+    if (apiQueue && apiQueue.length > 0) {
+      return apiQueue;
+    }
+    return [DEMO_RAJ_QUEUE_ITEM];
   } catch {
     // Backend down — show demo only
     return [DEMO_RAJ_QUEUE_ITEM];

@@ -118,8 +118,28 @@ def submit_answer(session_token: str, answer: Answer, db: Session = Depends(get_
             )
             db.add(symp)
             
-    # Update state in history
-    history.history_data = updated_state.model_dump()
+    # Update state in history with top-level chief_complaint and hpi for doctor summary aggregation
+    h_data = updated_state.model_dump()
+    if "chief_complaint" in updated_state.facts:
+        h_data["chief_complaint"] = str(updated_state.facts["chief_complaint"].value)
+    elif updated_state.primary_symptom:
+        h_data["chief_complaint"] = str(updated_state.primary_symptom)
+
+    hpi_parts = []
+    if "onset" in updated_state.facts:
+        hpi_parts.append(f"Onset: {updated_state.facts['onset'].value}")
+    if "severity" in updated_state.facts:
+        hpi_parts.append(f"Severity: {updated_state.facts['severity'].value}")
+    if "character" in updated_state.facts:
+        hpi_parts.append(f"Character: {updated_state.facts['character'].value}")
+    if "location" in updated_state.facts:
+        hpi_parts.append(f"Location: {updated_state.facts['location'].value}")
+    if "radiation" in updated_state.facts:
+        hpi_parts.append(f"Radiation: {updated_state.facts['radiation'].value}")
+    if hpi_parts:
+        h_data["hpi"] = "; ".join(hpi_parts)
+
+    history.history_data = h_data
     
     # ── Conversation → patient_facts pipeline ──
     # Extracts structured facts from the raw transcript via NLU,
@@ -150,7 +170,7 @@ def submit_answer(session_token: str, answer: Answer, db: Session = Depends(get_
 
 @router.get("/question/{pathway_name}/{question_id}")
 def get_question_details(pathway_name: str, question_id: str):
-    if pathway_name == "chief_complaint" or question_id == "chief_complaint_initial":
+    if pathway_name in ("chief_complaint", "general_intake") or question_id == "chief_complaint_initial":
         return {
             "id": "chief_complaint_initial",
             "text": "What brings you here today?",
@@ -161,9 +181,17 @@ def get_question_details(pathway_name: str, question_id: str):
             "required": True
         }
     pathway = get_pathway(pathway_name)
-    if not pathway:
-        raise HTTPException(status_code=404, detail="Pathway not found")
-    for q in pathway:
-        if q.id == question_id:
-            return q
+    if pathway:
+        for q in pathway:
+            if q.id == question_id:
+                return q
+
+    # Cross-pathway search fallback to guarantee zero 404s
+    for alt_p in ["headache", "chest_pain", "abdominal_pain", "fever", "cough", "vomiting", "general", "general_intake"]:
+        p = get_pathway(alt_p)
+        if p:
+            for q in p:
+                if q.id == question_id:
+                    return q
+
     raise HTTPException(status_code=404, detail="Question not found")

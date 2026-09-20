@@ -159,7 +159,7 @@ export default function QueuePage() {
                         <span className={`w-1.5 h-1.5 rounded-full ${sCfg.dot}`} />
                         {sCfg.label}
                       </div>
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-slate-400" suppressHydrationWarning>
                         {new Date(patient.arrival).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
                     </div>

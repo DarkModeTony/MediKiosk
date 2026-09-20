@@ -18,6 +18,8 @@ export interface Encounter {
 
 export interface QueueItem extends Patient, Encounter {
   arrival: string;
+  red_flag_count?: number;
+  red_flag_severity?: string;
 }
 
 export interface FactState {
@@ -79,10 +81,33 @@ export interface DocumentEntity {
 export interface TimelineEvent {
   date: string;
   date_known: boolean;
-  type: 'DOCUMENT' | 'ENCOUNTER';
-  document_id: string;
-  document_type: string;
-  entities: DocumentEntity[];
+  type:
+    | 'DOCUMENT'
+    | 'ENCOUNTER'
+    | 'DOCTALK_REQUESTED'
+    | 'DOCTALK_ACCEPTED'
+    | 'DOCTALK_STARTED'
+    | 'DOCTALK_COMPLETED'
+    | 'DOCTALK_OPINION';
+  title?: string;
+  document_id?: string;
+  document_type?: string;
+  entities?: DocumentEntity[];
+  // DocTalk fields
+  encounter_id?: string;
+  consultation_id?: string;
+  note_id?: string;
+  specialist_name?: string;
+  specialist_hospital?: string;
+  specialty?: string;
+  reason?: string;
+  urgency?: string;
+  requested_duration_minutes?: number;
+  duration_minutes?: number;
+  clinical_opinion?: string;
+  recommendations?: any;
+  further_evaluation?: string;
+  follow_up?: string;
 }
 
 export interface PatientTimeline {

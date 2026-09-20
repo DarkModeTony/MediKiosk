@@ -28,11 +28,15 @@ from app.models.models import (
     PatientLongitudinalProfile, PatientFact,
 )
 from app.core.security import hash_password
+from seed_doctors import seed_doctors
 
 def utcnow():
     return datetime.now(timezone.utc)
 
 def seed():
+    # Seed network doctors across specialties and locations first
+    seed_doctors()
+
     db = SessionLocal()
     try:
         print("=== MediPlatform Demo Seed ===")

@@ -1,6 +1,7 @@
+import uuid
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
-from app.models.models import Encounter, ClinicalHistory, Symptom, RedFlag, Document, DocumentEntity
+from app.models.models import Encounter, ClinicalHistory, Symptom, RedFlag, Document, DocumentEntity, PatientLongitudinalProfile
 from .models import ClinicalSummaryInput, SourceReference, SourceType
 
 class ClinicalDataAggregator:
@@ -8,7 +9,13 @@ class ClinicalDataAggregator:
         self.db = db
 
     def gather_data(self, encounter_id: str) -> tuple[ClinicalSummaryInput, List[SourceReference]]:
-        encounter = self.db.query(Encounter).filter(Encounter.id == encounter_id).first()
+        encounter = None
+        try:
+            enc_uuid = uuid.UUID(str(encounter_id))
+            encounter = self.db.query(Encounter).filter(Encounter.id == enc_uuid).first()
+        except (ValueError, TypeError):
+            encounter = self.db.query(Encounter).filter(Encounter.id == encounter_id).first()
+
         if not encounter:
             raise ValueError(f"Encounter {encounter_id} not found")
 
@@ -20,7 +27,7 @@ class ClinicalDataAggregator:
         input_data.encounter_context = {"status": encounter.status, "start_time": encounter.start_time.isoformat() if encounter.start_time else None}
 
         # 2. Clinical History
-        history = self.db.query(ClinicalHistory).filter(ClinicalHistory.encounter_id == encounter_id).first()
+        history = self.db.query(ClinicalHistory).filter(ClinicalHistory.encounter_id == encounter.id).first()
         if history and history.history_data:
             hd = history.history_data
             input_data.chief_complaint = hd.get("chief_complaint")

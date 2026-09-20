@@ -6,7 +6,17 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.models.models import Document, DocumentOCR, DocumentEntity, KioskSession, Encounter, User
+from app.models.models import (
+    Document,
+    DocumentOCR,
+    DocumentEntity,
+    KioskSession,
+    Encounter,
+    User,
+    Hospital,
+    DocTalkConsultation,
+    DocTalkConsultationNote,
+)
 from app.services.storage import get_document_storage
 from app.api.deps import get_current_user, verify_document_access, verify_patient_access
 from ai.ocr.service import get_ocr_provider
@@ -236,32 +246,147 @@ def confirm_document(
 @router.get("/patients/{patient_id}/timeline")
 def get_patient_timeline(
     patient_id: str,
+    encounter_id: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     patient = verify_patient_access(patient_id, current_user, db)
-    # This gathers documents connected to patient_id directly or via encounters
-    encounters = db.query(Encounter).filter(Encounter.patient_id == patient.id).all()
+    
+    # Gathers documents and consultations connected to patient_id directly or via encounters
+    enc_query = db.query(Encounter).filter(Encounter.patient_id == patient.id)
+    if encounter_id:
+        try:
+            import uuid as _uuid
+            enc_uuid = _uuid.UUID(encounter_id)
+            enc_query = enc_query.filter(Encounter.id == enc_uuid)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid encounter_id format")
+
+    encounters = enc_query.all()
     enc_ids = [e.id for e in encounters]
     
-    docs = db.query(Document).filter(Document.encounter_id.in_(enc_ids)).all()
-    
     events = []
-    for doc in docs:
-        entities = db.query(DocumentEntity).filter(DocumentEntity.document_id == doc.id).all()
-        ent_list = [{"type": e.entity_type, "value": e.value, "status": e.status} for e in entities]
+
+    # 1. Documents
+    if enc_ids:
+        docs = db.query(Document).filter(Document.encounter_id.in_(enc_ids)).all()
+        for doc in docs:
+            entities = db.query(DocumentEntity).filter(DocumentEntity.document_id == doc.id).all()
+            ent_list = [{"type": e.entity_type, "value": e.value, "status": e.status} for e in entities]
+            
+            events.append({
+                "date": doc.document_date.isoformat() if doc.document_date else None,
+                "date_known": doc.document_date is not None,
+                "type": "DOCUMENT",
+                "document_id": str(doc.id),
+                "document_type": doc.doc_type,
+                "entities": ent_list,
+                "encounter_id": str(doc.encounter_id) if doc.encounter_id else None,
+            })
+
+    # 2. DocTalk consultations and opinions
+    if enc_ids:
+        consultations = db.query(DocTalkConsultation).filter(
+            DocTalkConsultation.encounter_id.in_(enc_ids)
+        ).all()
+
+        for consult in consultations:
+            # Resolve specialist & hospital attribution
+            spec = db.query(User).filter(User.id == consult.specialist_id).first() if consult.specialist_id else None
+            spec_name = spec.display_name or (f"Dr. {spec.username.capitalize()}" if spec else None)
+            spec_hosp = db.query(Hospital).filter(Hospital.id == consult.specialist_hospital_id).first() if consult.specialist_hospital_id else None
+            spec_hosp_name = spec_hosp.name if spec_hosp else None
+
+            # Milestone 1: 🩺 DocTalk requested
+            if consult.created_at:
+                events.append({
+                    "date": consult.created_at.isoformat(),
+                    "date_known": True,
+                    "type": "DOCTALK_REQUESTED",
+                    "title": "🩺 DocTalk requested",
+                    "consultation_id": str(consult.id),
+                    "encounter_id": str(consult.encounter_id),
+                    "specialty": consult.specialty,
+                    "reason": consult.reason,
+                    "urgency": consult.urgency,
+                    "requested_duration_minutes": consult.requested_duration_minutes,
+                    "specialist_name": spec_name or "Any Available Specialist",
+                    "specialist_hospital": spec_hosp_name,
+                })
+
+            # Milestone 2: ✓ Specialist accepted
+            if consult.accepted_at:
+                events.append({
+                    "date": consult.accepted_at.isoformat(),
+                    "date_known": True,
+                    "type": "DOCTALK_ACCEPTED",
+                    "title": "✓ Specialist accepted",
+                    "consultation_id": str(consult.id),
+                    "encounter_id": str(consult.encounter_id),
+                    "specialty": consult.specialty,
+                    "specialist_name": spec_name,
+                    "specialist_hospital": spec_hosp_name,
+                })
+
+            # Milestone 3: 🟢 Consultation started
+            if consult.started_at:
+                events.append({
+                    "date": consult.started_at.isoformat(),
+                    "date_known": True,
+                    "type": "DOCTALK_STARTED",
+                    "title": "🟢 Consultation started",
+                    "consultation_id": str(consult.id),
+                    "encounter_id": str(consult.encounter_id),
+                    "specialty": consult.specialty,
+                    "specialist_name": spec_name,
+                    "specialist_hospital": spec_hosp_name,
+                    "duration_minutes": consult.requested_duration_minutes,
+                })
+
+            # Milestone 4: ✓ Consultation completed
+            if consult.completed_at:
+                events.append({
+                    "date": consult.completed_at.isoformat(),
+                    "date_known": True,
+                    "type": "DOCTALK_COMPLETED",
+                    "title": "✓ Consultation completed",
+                    "consultation_id": str(consult.id),
+                    "encounter_id": str(consult.encounter_id),
+                    "specialty": consult.specialty,
+                    "specialist_name": spec_name,
+                    "specialist_hospital": spec_hosp_name,
+                })
+
+            # Milestone 5: 📄 Specialist opinion added
+            notes = db.query(DocTalkConsultationNote).filter(
+                DocTalkConsultationNote.consultation_id == consult.id
+            ).order_by(DocTalkConsultationNote.created_at.asc()).all()
+
+            for note in notes:
+                note_spec = db.query(User).filter(User.id == note.specialist_id).first() if note.specialist_id else spec
+                note_spec_name = note_spec.display_name or (f"Dr. {note_spec.username.capitalize()}" if note_spec else spec_name)
+                note_hosp = db.query(Hospital).filter(Hospital.id == note.specialist_hospital_id).first() if note.specialist_hospital_id else spec_hosp
+                note_hosp_name = note_hosp.name if note_hosp else spec_hosp_name
+
+                events.append({
+                    "date": note.created_at.isoformat() if note.created_at else None,
+                    "date_known": note.created_at is not None,
+                    "type": "DOCTALK_OPINION",
+                    "title": "📄 Specialist opinion added",
+                    "consultation_id": str(consult.id),
+                    "note_id": str(note.id),
+                    "encounter_id": str(consult.encounter_id),
+                    "specialty": consult.specialty,
+                    "specialist_name": note_spec_name,
+                    "specialist_hospital": note_hosp_name,
+                    "clinical_opinion": note.clinical_opinion,
+                    "recommendations": note.recommendations,
+                    "further_evaluation": note.further_evaluation,
+                    "follow_up": note.follow_up,
+                })
         
-        events.append({
-            "date": doc.document_date.isoformat() if doc.document_date else None,
-            "date_known": doc.document_date is not None,
-            "type": "DOCUMENT",
-            "document_id": str(doc.id),
-            "document_type": doc.doc_type,
-            "entities": ent_list
-        })
-        
-    # Sort by date, falling back to oldest/newest or arbitrary for unknown dates
-    events.sort(key=lambda x: x["date"] or "")
+    # Sort chronologically by date
+    events.sort(key=lambda x: x.get("date") or "")
     
     return {
         "patient_id": str(patient.id),

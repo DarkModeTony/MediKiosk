@@ -20,20 +20,23 @@ class MockNLUProvider(NLUProvider):
 
         # 1. Chief Complaint & Symptoms
         symptom_map = {
-            "chest pain": ["chest", "सीने", "छाती"],
-            "fever": ["fever", "बुखार", "ताप"],
-            "abdominal pain": ["stomach", "abdominal", "पेट"],
-            "headache": ["headache", "सर दर्द", "सिर दर्द"],
-            "cough": ["cough", "खांसी"],
-            "shortness of breath": ["breath", "सांस", "dyspnea"],
-            "vomiting": ["vomit", "उल्टी"],
+            "chest pain": ["chest pain", "chest", "सीने में दर्द", "सीने", "छाती", "heart pain", "chhati", "chest discomfort"],
+            "headache": ["headache", "head pain", "head hurts", "sar dard", "sir dard", "sar me dard", "sir me dard", "migraine", "matha", "माथा", "सिर दर्द", "सर दर्द", "सिर में दर्द", "सर में दर्द"],
+            "abdominal pain": ["stomach pain", "stomach ache", "stomach hurts", "abdominal pain", "stomach", "abdominal", "pet dard", "pet me dard", "पेट में दर्द", "पेट दर्द", "पेट", "belly pain", "tummy ache"],
+            "fever": ["fever", "high fever", "बुखार", "ताप", "temperature", "bukhar", "tez bukhar", "तेज बुखार"],
+            "cough": ["cough", "खांसी", "khansi", "balgham", "phlegm", "coughing"],
+            "shortness of breath": ["shortness of breath", "breath", "सांस", "dyspnea", "saans", "difficulty breathing", "सांस लेने में तकलीफ"],
+            "vomiting": ["vomit", "vomiting", "उल्टी", "nausea", "जी मिचलाना", "ulti", "throwing up", "puking"],
+            "dizziness": ["dizzy", "dizziness", "chakkar", "चक्कर", "lightheaded", "faint", "सिर चकराना"],
+            "weakness": ["weakness", "kamzori", "कमजोरी", "fatigue", "tiredness", "exhaustion", "weak"],
+            "body ache": ["body ache", "badan dard", "बदन दर्द", "body pain"],
         }
 
-        detected_symptom = None
+        detected_symptoms = []
         for symptom_name, keywords in symptom_map.items():
             for kw in keywords:
                 if kw in t:
-                    detected_symptom = symptom_name
+                    detected_symptoms.append(symptom_name)
                     facts.append(
                         CandidateFact(
                             category="symptom",
@@ -46,25 +49,25 @@ class MockNLUProvider(NLUProvider):
                         )
                     )
                     break
-            if detected_symptom and question_id == "chief_complaint_initial":
-                facts.append(
-                    CandidateFact(
-                        category="chief_complaint",
-                        fact_type="chief_complaint",
-                        value={"complaint": detected_symptom},
-                        source_text=transcript,
-                        confidence=FactConfidence.HIGH,
-                        confidence_score=0.95,
-                    )
-                )
-                break
 
-        if question_id == "chief_complaint_initial" and not detected_symptom and transcript:
+        if detected_symptoms and question_id == "chief_complaint_initial":
+            primary = detected_symptoms[0]
             facts.append(
                 CandidateFact(
                     category="chief_complaint",
                     fact_type="chief_complaint",
-                    value={"complaint": transcript},
+                    value={"complaint": primary, "all_symptoms": detected_symptoms},
+                    source_text=transcript,
+                    confidence=FactConfidence.HIGH,
+                    confidence_score=0.95,
+                )
+            )
+        elif question_id == "chief_complaint_initial" and not detected_symptoms and transcript:
+            facts.append(
+                CandidateFact(
+                    category="chief_complaint",
+                    fact_type="chief_complaint",
+                    value={"complaint": transcript, "all_symptoms": []},
                     source_text=transcript,
                     confidence=FactConfidence.MEDIUM,
                     confidence_score=0.75,
@@ -73,13 +76,19 @@ class MockNLUProvider(NLUProvider):
 
         # 2. Onset
         onset_val = None
-        if "today" in t or "आज" in t:
+        if any(w in t for w in ["sudden", "thunderclap", "suddenly", "अचानक"]):
+            onset_val = "sudden"
+        elif "today" in t or "आज" in t:
             onset_val = "today"
         elif "yesterday" in t or "कल" in t:
             onset_val = "yesterday"
+        elif "morning" in t or "सुबह" in t:
+            onset_val = "morning"
+        elif "hour" in t or "घंटे" in t:
+            onset_val = "hours"
         elif "days" in t or "दिन" in t:
-            match = re.search(r"(\d+)\s*(days?|दिन)", t)
-            onset_val = f"{match.group(1)} days ago" if match else "recent"
+            match = re.search(r"(\d+|one|two|three|four|five|six|seven|ten|एक|दो|तीन|चार)\s*(days?|दिन)", t)
+            onset_val = f"{match.group(1)} days ago" if match else "few days ago"
 
         if onset_val:
             facts.append(

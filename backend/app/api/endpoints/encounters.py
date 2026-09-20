@@ -15,7 +15,7 @@ def get_active_encounters(
     if current_user.hospital_id:
         query = query.filter(Patient.hospital_id == current_user.hospital_id)
     
-    encounters = query.filter(Encounter.status == "IN_PROGRESS").all()
+    encounters = query.filter(Encounter.status.in_(["IN_PROGRESS", "WAITING_FOR_DOCTOR"])).all()
     queue = []
     for enc in encounters:
         patient = db.query(Patient).filter(Patient.id == enc.patient_id).first()
@@ -65,3 +65,18 @@ def get_encounter(
         "start_time": encounter.start_time,
         "end_time": encounter.end_time
     }
+
+@router.get("/{encounter_id}/timeline")
+def get_encounter_timeline(
+    encounter_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    encounter = verify_encounter_access(encounter_id, current_user, db)
+    from app.api.endpoints.documents import get_patient_timeline
+    return get_patient_timeline(
+        patient_id=str(encounter.patient_id),
+        encounter_id=str(encounter.id),
+        db=db,
+        current_user=current_user
+    )

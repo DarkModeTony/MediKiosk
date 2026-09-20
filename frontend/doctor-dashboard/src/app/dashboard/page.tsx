@@ -57,6 +57,8 @@ export default function DashboardPage() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [mounted, setMounted] = useState(false);
+  const [doctorName, setDoctorName] = useState('Dr. Sharma');
 
   const loadQueue = () => {
     setLoading(true);
@@ -68,6 +70,14 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
+    setMounted(true);
+    try {
+      const stored = localStorage.getItem('currentUser');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.displayName) setDoctorName(parsed.displayName);
+      }
+    } catch {}
     loadQueue();
   }, []);
 
@@ -87,9 +97,13 @@ export default function DashboardPage() {
         {/* Page header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100">Good morning, Dr. Sharma</h1>
-            <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">
-              Last updated: {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100" suppressHydrationWarning>
+              Welcome, {doctorName}
+            </h1>
+            <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm" suppressHydrationWarning>
+              {mounted
+                ? `Last updated: ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                : 'Connecting to hospital network...'}
             </p>
           </div>
           <button

@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
+from datetime import datetime
 from app.database import get_db
-from app.models.models import Patient, User, Hospital
+from app.models.models import Patient, User, Hospital, Encounter, PatientLongitudinalProfile
 from app.api.deps import get_current_user, verify_patient_access, get_or_create_default_hospital
 
 router = APIRouter()
@@ -24,16 +25,22 @@ def search_patient(
     if not query_str:
         raise HTTPException(status_code=400, detail="Search query is required")
 
-    # 1. Check if demo alias for Raj Kumar
-    is_raj_alias = query_str.lower() in [
-        "patient_001", "pat_raj_123", "raj", "raj kumar", "9000000001"
-    ]
+    DEMO_PATIENT_MAP = {
+        "patient_001": "9000000001", "pat_raj_123": "9000000001", "raj": "9000000001", "raj kumar": "9000000001", "9000000001": "9000000001",
+        "patient_002": "9000000002", "anita": "9000000002", "anita desai": "9000000002", "9000000002": "9000000002",
+        "patient_003": "9000000003", "mohan": "9000000003", "mohan lal verma": "9000000003", "9000000003": "9000000003",
+        "patient_004": "9000000004", "priya": "9000000004", "priya swaminathan": "9000000004", "9000000004": "9000000004",
+        "patient_005": "9000000005", "arjun": "9000000005", "arjun patel": "9000000005", "9000000005": "9000000005",
+        "patient_006": "9000000006", "sunita": "9000000006", "sunita roy": "9000000006", "9000000006": "9000000006",
+        "patient_007": "9000000007", "harpreet": "9000000007", "harpreet singh": "9000000007", "9000000007": "9000000007",
+    }
     
     patient = None
-    if is_raj_alias:
+    target_phone = DEMO_PATIENT_MAP.get(query_str.lower())
+    if target_phone:
         for p in db.query(Patient).all():
             demo = p.demographic_data or {}
-            if str(demo.get("phone")) == "9000000001" or str(demo.get("name", "")).strip().lower() == "raj kumar":
+            if str(demo.get("phone")) == target_phone:
                 patient = p
                 break
 
@@ -119,7 +126,44 @@ def register_patient(
     db.add(patient)
     db.commit()
     db.refresh(patient)
+
+    # 1. Create fresh, isolated encounter strictly for this new patient
+    encounter = Encounter(
+        patient_id=patient.id,
+        status="IN_PROGRESS",
+        start_time=datetime.utcnow()
+    )
+    db.add(encounter)
+    db.commit()
+    db.refresh(encounter)
+
+    # 2. Create clean, empty longitudinal profile (no inherited history)
+    empty_profile = {
+        "schema_version": "1.0",
+        "last_updated": datetime.utcnow().isoformat(),
+        "medical_history": {
+            "chronic_conditions": [],
+            "surgeries": [],
+            "hospitalizations": []
+        },
+        "allergies": {
+            "known": []
+        },
+        "current_medications": [],
+        "family_history": {},
+        "social_history": {},
+        "vitals_last": {}
+    }
+    long_profile = PatientLongitudinalProfile(
+        patient_id=patient.id,
+        schema_version="1.0",
+        profile=empty_profile
+    )
+    db.add(long_profile)
+    db.commit()
+
     return {
         "patient_id": str(patient.id),
+        "encounter_id": str(encounter.id),
         "hospital_id": str(patient.hospital_id) if patient.hospital_id else None
     }

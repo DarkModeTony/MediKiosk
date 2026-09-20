@@ -62,6 +62,7 @@ export default function NewPatientPage() {
       setSession({
         sessionId: sessionData.session_token,
         patientId: patientData.patient_id,
+        encounterId: sessionData.encounter_id || patientData.encounter_id || undefined,
         expiresAt: sessionData.expires_at,
       });
 

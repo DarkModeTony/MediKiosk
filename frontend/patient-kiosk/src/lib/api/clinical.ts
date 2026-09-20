@@ -36,6 +36,11 @@ export interface ClinicalState {
   facts: Record<string, Fact>;
   new_red_flags: RedFlag[];
   completed: boolean;
+  primary_symptom?: string | null;
+  active_symptoms?: string[];
+  duration?: string | null;
+  severity?: string | null;
+  conversation_phase?: string;
 }
 
 export interface AnswerPayload {

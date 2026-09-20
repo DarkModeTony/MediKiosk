@@ -297,11 +297,23 @@ export default function ClinicalConversationPage() {
         {question && (
           <div key={questionKey} className="w-full space-y-5 animate-slide-up">
 
-            {/* Question Category Badge */}
-            <div className="flex items-center justify-between px-1">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-900/60 border border-blue-700/60 text-blue-300 rounded-full text-xs font-bold uppercase tracking-wider">
-                <Stethoscope size={12} />
-                {question.category || "General Intake"}
+            {/* Question Category & Context Badges */}
+            <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-900/60 border border-blue-700/60 text-blue-300 rounded-full text-xs font-bold uppercase tracking-wider">
+                  <Stethoscope size={12} />
+                  {question.category || "General Intake"}
+                </div>
+                {state?.primary_symptom && (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/10 border border-white/20 text-white rounded-full text-xs font-semibold capitalize">
+                    <span className="text-blue-300">Complaint:</span> {state.primary_symptom}
+                  </div>
+                )}
+                {state?.duration && (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-teal-900/40 border border-teal-700/50 text-teal-200 rounded-full text-xs font-semibold">
+                    <span className="text-teal-400">Duration:</span> {state.duration}
+                  </div>
+                )}
               </div>
               {detectedLang && (
                 <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-900/50 border border-teal-700/50 text-teal-300 rounded-full text-xs font-semibold">

@@ -36,7 +36,8 @@ class RedFlagEngine:
                 ))
 
         # Rule 2: Sudden onset severe headache (Thunderclap)
-        if get_val("chief_complaint") == "headache" and get_val("onset") == "sudden":
+        onset_val = get_val("onset")
+        if get_val("chief_complaint") == "headache" and (onset_val in ["sudden", "sudden_thunderclap"] or (onset_val and "sudden" in onset_val)):
              flags.append(RedFlag(
                  rule_name="THUNDERCLAP_HEADACHE",
                  evidence={"complaint": "headache", "onset": "sudden"},

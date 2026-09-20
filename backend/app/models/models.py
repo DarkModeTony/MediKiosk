@@ -22,6 +22,13 @@ class User(Base):
     role = Column(String)
     username = Column(String, unique=True, index=True)
     password_hash = Column(String)
+    display_name = Column(String, nullable=True)
+    specialty = Column(String, nullable=True, index=True)
+    sub_specialty = Column(String, nullable=True)
+    qualification = Column(String, nullable=True)
+    doctalk_enabled = Column(Boolean, default=True)
+    availability_status = Column(String, default="AVAILABLE") # AVAILABLE, BUSY, OFFLINE
+    is_verified = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     hospital = relationship("Hospital", back_populates="users")
@@ -334,4 +341,79 @@ class InvestigationResult(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     order = relationship("InvestigationOrder", back_populates="results")
+
+
+class DocTalkConsultation(Base):
+    __tablename__ = "doctalk_consultations"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    requesting_doctor_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=False)
+    requesting_hospital_id = Column(UUID(as_uuid=True), ForeignKey("hospitals.id"), index=True, nullable=False)
+    specialist_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=True)
+    specialist_hospital_id = Column(UUID(as_uuid=True), ForeignKey("hospitals.id"), index=True, nullable=True)
+    patient_id = Column(UUID(as_uuid=True), ForeignKey("patients.id"), index=True, nullable=False)
+    patient_home_hospital_id = Column(UUID(as_uuid=True), ForeignKey("hospitals.id"), nullable=False)
+    encounter_id = Column(UUID(as_uuid=True), ForeignKey("encounters.id"), index=True, nullable=False)
+    specialty = Column(String, nullable=False, index=True)
+    reason = Column(Text, nullable=False)
+    urgency = Column(String, default="ROUTINE") # ROUTINE, URGENT, STAT
+    requested_duration_minutes = Column(Integer, default=5, nullable=False) # 3, 5, 7 only
+    status = Column(String, default="REQUESTED", index=True) # REQUESTED, ACCEPTED, DECLINED, CANCELLED, EXPIRED, IN_PROGRESS, COMPLETED
+    access_scope = Column(JSONB, nullable=True) # Controlled snapshot of patient facts, vitals, summary, meds
+    access_expires_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=True, index=True) # Expiration timestamp for pending request
+    decline_reason = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    accepted_at = Column(DateTime, nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    cancelled_at = Column(DateTime, nullable=True)
+
+    requesting_doctor = relationship("User", foreign_keys=[requesting_doctor_id])
+    specialist = relationship("User", foreign_keys=[specialist_id])
+    requesting_hospital = relationship("Hospital", foreign_keys=[requesting_hospital_id])
+    specialist_hospital = relationship("Hospital", foreign_keys=[specialist_hospital_id])
+    patient = relationship("Patient", foreign_keys=[patient_id])
+    patient_home_hospital = relationship("Hospital", foreign_keys=[patient_home_hospital_id])
+    encounter = relationship("Encounter", foreign_keys=[encounter_id])
+    notes = relationship("DocTalkConsultationNote", back_populates="consultation", cascade="all, delete-orphan")
+
+
+class DocTalkConsultationNote(Base):
+    __tablename__ = "doctalk_consultation_notes"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    consultation_id = Column(UUID(as_uuid=True), ForeignKey("doctalk_consultations.id"), index=True, nullable=False)
+    encounter_id = Column(UUID(as_uuid=True), ForeignKey("encounters.id"), index=True, nullable=True)
+    specialist_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    specialist_hospital_id = Column(UUID(as_uuid=True), ForeignKey("hospitals.id"), nullable=False)
+    clinical_opinion = Column(Text, nullable=False)
+    recommendations = Column(JSONB, nullable=True)
+    further_evaluation = Column(Text, nullable=True)
+    follow_up = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    consultation = relationship("DocTalkConsultation", back_populates="notes")
+    specialist = relationship("User", foreign_keys=[specialist_id])
+    specialist_hospital = relationship("Hospital", foreign_keys=[specialist_hospital_id])
+    encounter = relationship("Encounter", foreign_keys=[encounter_id])
+
+
+class DocTalkNotification(Base):
+    __tablename__ = "doctalk_notifications"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=False)
+    consultation_id = Column(UUID(as_uuid=True), ForeignKey("doctalk_consultations.id"), index=True, nullable=True)
+    encounter_id = Column(UUID(as_uuid=True), ForeignKey("encounters.id"), index=True, nullable=True)
+    event_type = Column(String, index=True, nullable=False)
+    title = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+    severity = Column(String, default="INFO") # INFO, SUCCESS, WARNING, URGENT
+    is_read = Column(Boolean, default=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    meta_data = Column(JSONB, nullable=True)
+
+    user = relationship("User", foreign_keys=[user_id])
+    consultation = relationship("DocTalkConsultation", foreign_keys=[consultation_id])
+    encounter = relationship("Encounter", foreign_keys=[encounter_id])
+
 

@@ -7,6 +7,7 @@ import SummaryPanel from '@/components/workspace/SummaryPanel';
 import DocumentViewer from '@/components/workspace/DocumentViewer';
 import ClinicalTimeline from '@/components/workspace/ClinicalTimeline';
 import PrescriptionWorkspace from '@/components/workspace/PrescriptionWorkspace';
+import DocTalkCard from '@/components/workspace/DocTalkCard';
 
 import { getEncounter } from '@/lib/api/encounters';
 import { getPatient } from '@/lib/api/patients';
@@ -59,7 +60,7 @@ export default function EncounterWorkspace({ params }: { params: Promise<{ encou
           getRedFlags(enc.id),
           getSummary(enc.id),
           getClinicalState(enc.id),
-          getTimeline(enc.patient_id),
+          getTimeline(enc.patient_id, enc.id),
         ]);
         if (patR.status === 'fulfilled') setPatient(patR.value);
         if (rfR.status === 'fulfilled') setRedFlags(rfR.value);
@@ -163,6 +164,22 @@ export default function EncounterWorkspace({ params }: { params: Promise<{ encou
             </div>
           </div>
         </div>
+
+        {/* DocTalk — Ask a Specialist Card */}
+        <DocTalkCard
+          encounterId={encounter.id}
+          patientName={patient.name}
+          treatingHospitalName="Apollo Hospitals"
+          suggestedSpecialty={
+            encounter.chief_complaint?.toLowerCase().includes('chest') || clinicalState?.facts?.CHIEF_COMPLAINT?.value?.toLowerCase().includes('chest')
+              ? 'Cardiology'
+              : encounter.chief_complaint?.toLowerCase().includes('headache') || clinicalState?.facts?.CHIEF_COMPLAINT?.value?.toLowerCase().includes('headache')
+              ? 'Neurology'
+              : encounter.chief_complaint?.toLowerCase().includes('cough') || clinicalState?.facts?.CHIEF_COMPLAINT?.value?.toLowerCase().includes('cough')
+              ? 'Pulmonology'
+              : 'Cardiology'
+          }
+        />
 
         {/* Red Flags */}
         {redFlags.length > 0 && <RedFlagPanel flags={redFlags} />}

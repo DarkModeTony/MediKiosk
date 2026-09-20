@@ -10,6 +10,8 @@ export interface PatientRegistration {
 
 export interface PatientResponse {
   patient_id: string;
+  encounter_id?: string;
+  hospital_id?: string;
 }
 
 export async function registerPatient(data: PatientRegistration): Promise<PatientResponse> {

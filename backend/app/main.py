@@ -12,7 +12,7 @@ from app.database import engine, Base
 from app.api.endpoints import (
     patients, kiosk, clinical, documents, summaries,
     encounters, longitudinal, voice, prescriptions,
-    auth, assessments, investigations
+    auth, assessments, investigations, doctalk
 )
 
 app = FastAPI(
@@ -46,6 +46,7 @@ app.include_router(assessments.router, prefix="/api/v1", tags=["Clinical Assessm
 app.include_router(investigations.router, prefix="/api/v1", tags=["Investigations"])
 app.include_router(voice.router, prefix="/api/v1/voice", tags=["Voice / ASR"])
 app.include_router(prescriptions.router, prefix="/api/v1", tags=["Prescriptions"])
+app.include_router(doctalk.router, prefix="/api/v1/doctalk", tags=["DocTalk"])
 
 @app.get("/health")
 def health_check():

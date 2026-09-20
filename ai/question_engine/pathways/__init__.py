@@ -5,6 +5,8 @@ from .abdominal_pain import get_abdominal_pain_pathway
 from .headache import get_headache_pathway
 from .cough import get_cough_pathway
 from .vomiting import get_vomiting_pathway
+from .general import get_general_pathway
+from .dizziness import get_dizziness_pathway
 
 def get_chief_complaint_pathway():
     return [
@@ -12,6 +14,8 @@ def get_chief_complaint_pathway():
             id="chief_complaint_initial",
             text="What brings you here today?",
             category="HPI",
+            domain="chief_complaint",
+            clinical_dimension="chief_complaint",
             input_type=InputType.VOICE_ONLY,
             clinical_field="chief_complaint",
             options=None,
@@ -27,7 +31,11 @@ def get_pathway(pathway_name: str):
         "abdominal_pain": get_abdominal_pain_pathway(),
         "headache": get_headache_pathway(),
         "cough": get_cough_pathway(),
-        "vomiting": get_vomiting_pathway()
+        "vomiting": get_vomiting_pathway(),
+        "dizziness": get_dizziness_pathway(),
+        "vertigo": get_dizziness_pathway(),
+        "general": get_general_pathway(),
+        "general_intake": get_general_pathway(),
     }
     return pathways.get(pathway_name)
 
