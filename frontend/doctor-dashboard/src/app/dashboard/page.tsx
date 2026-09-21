@@ -60,12 +60,14 @@ export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
   const [doctorName, setDoctorName] = useState('Dr. Sharma');
 
-  const loadQueue = () => {
-    setLoading(true);
+  const loadQueue = (silent = false) => {
+    if (!silent) setLoading(true);
     getQueue().then((data) => {
       setQueue(data);
-      setLoading(false);
+      if (!silent) setLoading(false);
       setLastUpdated(new Date());
+    }).catch(() => {
+      if (!silent) setLoading(false);
     });
   };
 
@@ -79,9 +81,13 @@ export default function DashboardPage() {
       }
     } catch {}
     loadQueue();
+    const interval = setInterval(() => {
+      loadQueue(true);
+    }, 4000);
+    return () => clearInterval(interval);
   }, []);
 
-  const waiting = queue.filter((q) => q.status === 'WAITING').length;
+  const waiting = queue.filter((q) => q.status === 'WAITING' || q.status === 'WAITING_FOR_DOCTOR' || q.status === 'IN_PROGRESS').length;
   const inConsultation = queue.filter((q) => q.status === 'IN_CONSULTATION').length;
   const completed = queue.filter((q) => q.status === 'COMPLETED').length;
   const highPriority = queue.filter((q) => q.priority === 'HIGH' && q.status !== 'COMPLETED').length;
@@ -107,7 +113,7 @@ export default function DashboardPage() {
             </p>
           </div>
           <button
-            onClick={loadQueue}
+            onClick={() => loadQueue(false)}
             disabled={loading}
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm transition-all disabled:opacity-50"
           >

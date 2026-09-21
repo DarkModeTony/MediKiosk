@@ -26,6 +26,8 @@ const PRIORITY_CONFIG = {
 
 const STATUS_CONFIG = {
   WAITING: { label: 'Waiting', dot: 'bg-amber-400', text: 'text-amber-600 dark:text-amber-400' },
+  WAITING_FOR_DOCTOR: { label: 'Ready for Doctor', dot: 'bg-amber-400', text: 'text-amber-600 dark:text-amber-400' },
+  IN_PROGRESS: { label: 'Intake / Waiting', dot: 'bg-blue-400', text: 'text-blue-600 dark:text-blue-400' },
   IN_CONSULTATION: { label: 'In Consultation', dot: 'bg-teal-500', text: 'text-teal-600 dark:text-teal-400' },
   COMPLETED: { label: 'Completed', dot: 'bg-slate-300', text: 'text-slate-400' },
 } as const;
@@ -35,19 +37,32 @@ export default function QueuePage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterOption>('ALL');
 
-  const loadQueue = () => {
-    setLoading(true);
+  const loadQueue = (silent = false) => {
+    if (!silent) setLoading(true);
     getQueue().then((data) => {
       setQueue(data);
-      setLoading(false);
+      if (!silent) setLoading(false);
+    }).catch(() => {
+      if (!silent) setLoading(false);
     });
   };
 
-  useEffect(() => { loadQueue(); }, []);
+  useEffect(() => {
+    loadQueue();
+    const timer = setInterval(() => {
+      loadQueue(true);
+    }, 4000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const isWaitingStatus = (status: string) => {
+    return status === 'WAITING' || status === 'WAITING_FOR_DOCTOR' || status === 'IN_PROGRESS';
+  };
 
   const filtered = queue.filter((p) => {
     if (filter === 'ALL') return true;
     if (filter === 'HIGH' || filter === 'MEDIUM' || filter === 'NORMAL') return p.priority === filter;
+    if (filter === 'WAITING') return isWaitingStatus(p.status);
     return p.status === filter;
   });
 
@@ -69,11 +84,11 @@ export default function QueuePage() {
           <div>
             <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100">Patient Queue</h1>
             <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-              {queue.length} total · {queue.filter(q => q.status === 'WAITING').length} waiting
+              {queue.length} total · {queue.filter(q => isWaitingStatus(q.status)).length} waiting
             </p>
           </div>
           <button
-            onClick={loadQueue}
+            onClick={() => loadQueue(false)}
             disabled={loading}
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm transition-all disabled:opacity-50"
           >

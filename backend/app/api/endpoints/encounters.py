@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models.models import Encounter, RedFlag, Patient, User
-from app.api.deps import get_current_user, verify_encounter_access
+from app.models.models import Encounter, RedFlag, Patient, User, ClinicalHistory
+from app.api.deps import get_current_user, verify_encounter_access, get_or_create_default_hospital
 
 router = APIRouter()
 
@@ -13,9 +13,18 @@ def get_active_encounters(
 ):
     query = db.query(Encounter).join(Patient, Encounter.patient_id == Patient.id)
     if current_user.hospital_id:
-        query = query.filter(Patient.hospital_id == current_user.hospital_id)
+        default_hosp = get_or_create_default_hospital(db)
+        if current_user.hospital_id == default_hosp.id:
+            query = query.filter(
+                (Patient.hospital_id == current_user.hospital_id) | (Patient.hospital_id.is_(None))
+            )
+        else:
+            query = query.filter(Patient.hospital_id == current_user.hospital_id)
     
-    encounters = query.filter(Encounter.status.in_(["IN_PROGRESS", "WAITING_FOR_DOCTOR"])).all()
+    encounters = query.filter(
+        Encounter.status.in_(["IN_PROGRESS", "WAITING_FOR_DOCTOR", "WAITING", "IN_CONSULTATION"])
+    ).order_by(Encounter.start_time.desc()).all()
+
     queue = []
     for enc in encounters:
         patient = db.query(Patient).filter(Patient.id == enc.patient_id).first()
@@ -27,6 +36,10 @@ def get_active_encounters(
             priority = "MEDIUM"
             
         demo = patient.demographic_data or {} if patient else {}
+        clin_hist = db.query(ClinicalHistory).filter(ClinicalHistory.encounter_id == enc.id).first()
+        chief_complaint = (clin_hist.history_data or {}).get("chief_complaint") if clin_hist else None
+        if not chief_complaint:
+            chief_complaint = "New Patient Registration / General Intake"
         
         queue.append({
             "id": str(enc.id),
@@ -34,9 +47,14 @@ def get_active_encounters(
             "status": enc.status,
             "priority": priority,
             "name": demo.get("name", "Unknown"),
-            "age": demo.get("age"),
-            "gender": demo.get("gender"),
-            "arrival": enc.start_time.isoformat() if enc.start_time else None
+            "age": demo.get("age") or demo.get("date_of_birth") or "--",
+            "gender": demo.get("gender") or "Unknown",
+            "chief_complaint": chief_complaint,
+            "red_flag_count": len(red_flags),
+            "red_flag_severity": priority if priority != "NORMAL" else None,
+            "arrival": enc.start_time.isoformat() if enc.start_time else None,
+            "created_at": enc.start_time.isoformat() if enc.start_time else None,
+            "updated_at": enc.start_time.isoformat() if enc.start_time else None,
         })
     return queue
 

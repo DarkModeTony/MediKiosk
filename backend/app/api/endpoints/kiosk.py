@@ -454,6 +454,11 @@ def get_kiosk_summary(
     if not encounter:
         raise HTTPException(status_code=404, detail="No encounter found for this session")
 
+    # Transition to WAITING_FOR_DOCTOR so the doctor dashboard sees them as ready for review
+    if encounter.status == "IN_PROGRESS":
+        encounter.status = "WAITING_FOR_DOCTOR"
+        db.commit()
+
     summary = db.query(ClinicalSummary).filter(ClinicalSummary.encounter_id == encounter.id).first()
     if not summary:
         # Generate summary on demand for THIS encounter only
@@ -519,6 +524,10 @@ def generate_kiosk_summary(
 
     if not encounter:
         raise HTTPException(status_code=404, detail="No active encounter found for this session")
+
+    if encounter.status == "IN_PROGRESS":
+        encounter.status = "WAITING_FOR_DOCTOR"
+        db.commit()
 
     from ai.summarization.aggregator import ClinicalDataAggregator
     from ai.summarization.service import get_summary_provider

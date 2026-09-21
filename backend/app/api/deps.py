@@ -15,9 +15,14 @@ def is_auth_enforced() -> bool:
     return os.getenv("AUTH_ENFORCE", "false").lower() in ("true", "1", "yes")
 
 def get_or_create_default_hospital(db: Session) -> Hospital:
-    hospital = db.query(Hospital).first()
+    # Always prioritize the main hospital: "Apollo Hospitals Delhi"
+    hospital = db.query(Hospital).filter(Hospital.name == "Apollo Hospitals Delhi").first()
     if not hospital:
-        hospital = Hospital(name="Default General Hospital")
+        hospital = db.query(Hospital).filter(Hospital.name.ilike("%Apollo%")).first()
+    if not hospital:
+        hospital = db.query(Hospital).first()
+    if not hospital:
+        hospital = Hospital(name="Apollo Hospitals Delhi")
         db.add(hospital)
         db.commit()
         db.refresh(hospital)
@@ -25,7 +30,11 @@ def get_or_create_default_hospital(db: Session) -> Hospital:
 
 def get_or_create_default_doctor(db: Session) -> User:
     hospital = get_or_create_default_hospital(db)
-    user = db.query(User).filter(User.role == "DOCTOR").first()
+    user = db.query(User).filter(User.hospital_id == hospital.id, User.role == "DOCTOR").first()
+    if not user:
+        user = db.query(User).filter(User.username == "dr.sharma").first()
+    if not user:
+        user = db.query(User).filter(User.role == "DOCTOR").first()
     if not user:
         user = User(
             hospital_id=hospital.id,
@@ -62,7 +71,16 @@ def get_current_user(
                 headers={"WWW-Authenticate": "Bearer"},
             )
         user_id = payload.get("sub")
-        user = db.query(User).filter(User.id == user_id).first()
+        user = None
+        try:
+            u_uuid = uuid.UUID(str(user_id))
+            user = db.query(User).filter(User.id == u_uuid).first()
+        except (ValueError, TypeError):
+            pass
+
+        if not user:
+            user = db.query(User).filter(User.username == str(user_id)).first()
+
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
