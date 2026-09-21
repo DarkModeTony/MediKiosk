@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import DoctorLayout from '@/components/layout/DoctorLayout';
-import { getQueue } from '@/lib/api/queue';
+import { getQueue, getCachedQueue } from '@/lib/api/queue';
 import { QueueItem } from '@/lib/api/types';
 import {
   Users,
@@ -54,8 +54,8 @@ function StatCard({
 }
 
 export default function DashboardPage() {
-  const [queue, setQueue] = useState<QueueItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [queue, setQueue] = useState<QueueItem[]>(() => getCachedQueue());
+  const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [mounted, setMounted] = useState(false);
   const [doctorName, setDoctorName] = useState('Dr. Sharma');
@@ -80,7 +80,7 @@ export default function DashboardPage() {
         if (parsed?.displayName) setDoctorName(parsed.displayName);
       }
     } catch {}
-    loadQueue();
+    loadQueue(queue.length > 0);
     const interval = setInterval(() => {
       loadQueue(true);
     }, 4000);

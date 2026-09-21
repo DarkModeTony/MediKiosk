@@ -33,5 +33,5 @@ export async function fetchClient(endpoint: string, options: RequestInit = {}) {
   return response.json();
 }
 
-// Utility to delay mock responses
-export const mockDelay = (ms: number = 300) => new Promise(resolve => setTimeout(resolve, ms));
+// Utility to delay mock responses (0ms by default for instant performance)
+export const mockDelay = (ms: number = 0) => new Promise(resolve => setTimeout(resolve, ms));

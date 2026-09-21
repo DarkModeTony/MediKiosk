@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import DoctorLayout from '@/components/layout/DoctorLayout';
-import { getQueue } from '@/lib/api/queue';
+import { getQueue, getCachedQueue } from '@/lib/api/queue';
 import { QueueItem } from '@/lib/api/types';
 import {
   Clock,
@@ -33,8 +33,8 @@ const STATUS_CONFIG = {
 } as const;
 
 export default function QueuePage() {
-  const [queue, setQueue] = useState<QueueItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [queue, setQueue] = useState<QueueItem[]>(() => getCachedQueue());
+  const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<FilterOption>('ALL');
 
   const loadQueue = (silent = false) => {
@@ -48,7 +48,7 @@ export default function QueuePage() {
   };
 
   useEffect(() => {
-    loadQueue();
+    loadQueue(queue.length > 0);
     const timer = setInterval(() => {
       loadQueue(true);
     }, 4000);

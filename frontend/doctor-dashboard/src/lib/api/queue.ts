@@ -19,24 +19,50 @@ const DEMO_RAJ_QUEUE_ITEM: QueueItem = {
   red_flag_severity: "MEDIUM",
 };
 
+export const MOCK_QUEUE: QueueItem[] = MOCK_ENCOUNTERS.map(enc => {
+  const patient = MOCK_PATIENTS.find(p => p.id === enc.patient_id);
+  return {
+    ...patient,
+    ...enc,
+    arrival: enc.created_at,
+  } as QueueItem;
+});
+
+const CACHE_KEY = 'medikiosk_doctor_queue_cache';
+
+export function getCachedQueue(): QueueItem[] {
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(CACHE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+  }
+  return MOCK_QUEUE;
+}
+
 export async function getQueue(): Promise<QueueItem[]> {
   if (IS_MOCK) {
-    await mockDelay();
-    return MOCK_ENCOUNTERS.map(enc => {
-      const patient = MOCK_PATIENTS.find(p => p.id === enc.patient_id);
-      return { ...enc, ...patient, arrival: enc.created_at } as QueueItem;
-    });
+    // Instant return for dummy data
+    return MOCK_QUEUE;
   }
   
-  // Real API
+  // Real API with instant fallback
   try {
     const apiQueue: QueueItem[] = await fetchClient(`/encounters/active`);
     if (apiQueue && apiQueue.length > 0) {
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify(apiQueue));
+        } catch {}
+      }
       return apiQueue;
     }
-    return [DEMO_RAJ_QUEUE_ITEM];
+    return MOCK_QUEUE;
   } catch {
-    // Backend down — show demo only
-    return [DEMO_RAJ_QUEUE_ITEM];
+    // Backend down or network delay — return cached or dummy data immediately
+    return getCachedQueue();
   }
 }
